@@ -9,7 +9,9 @@ uv sync                          # Install dependencies
 uv sync --extra dev              # Install with dev dependencies
 uv run pytest tests/ -v          # Run all tests
 uv run pytest tests/path/test_file.py::TestClass::test_method -v  # Run single test
-uv run ruff check src/           # Lint code
+uv run ruff check src/ tests/    # Lint code
+uv run ruff check src/ tests/ --fix  # Auto-fix lint issues
+uv run pytest tests/ --cov=src/meshtastic_handler --cov-report=term-missing  # Coverage
 uv run python -m meshtastic_handler  # Run server
 ```
 
@@ -50,6 +52,10 @@ IncomingMessage → HandlerServer → MessageRouter → Plugin.handle()
 - `metadata` property → `PluginMetadata(name, description, menu_number, commands)`
 - `handle(message, context, plugin_state)` → `PluginResponse(message, plugin_state, exit_plugin)`
 - Plugins are async, use `httpx` for HTTP calls
+- `HTTPPluginBase` (`plugins/base.py`) - base class for HTTP plugins with error handling
+- `PluginLoader` (`core/plugin_loader.py`) - dynamic plugin discovery from modules/files/dirs
+
+**PluginRegistry** key methods: `register()`, `get_by_name()`, `get_by_menu_number()`, `get_all_plugins()`, `unregister()`
 
 ### Plugin State Pattern
 
@@ -77,6 +83,12 @@ async def handle(self, message, context, plugin_state):
 - **Async plugins**: All `handle()` methods are async
 - **Frozen dataclasses** for immutable data: `PluginMetadata`, `PluginResponse`, `NodeContext`, `GPSLocation`
 - **Mutable Session**: Session tracks state, modified via methods not direct assignment
+
+## Gotchas
+
+- Wikipedia API returns 403 without a `User-Agent` header — always set one on `httpx.AsyncClient`
+- `MeshtasticTransport` supports serial, tcp, and ble — BLE requires `meshtastic.ble_interface`
+- `PluginRegistry.get_all_plugins()` (not `get_all()`) returns sorted plugin list
 
 ## Issue Tracking
 

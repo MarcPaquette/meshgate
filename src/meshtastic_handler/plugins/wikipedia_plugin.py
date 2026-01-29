@@ -25,6 +25,9 @@ class WikipediaPlugin(Plugin):
     Any other text is treated as a search query.
     """
 
+    # Required by Wikipedia API policy
+    USER_AGENT = "MeshtasticHandlerServer/1.0 (https://github.com/meshtastic-handler-server)"
+
     def __init__(
         self,
         language: str = "en",
@@ -42,6 +45,7 @@ class WikipediaPlugin(Plugin):
         self._max_summary_length = max_summary_length
         self._timeout = timeout
         self._base_url = f"https://{language}.wikipedia.org/api/rest_v1"
+        self._headers = {"User-Agent": self.USER_AGENT}
 
     @property
     def metadata(self) -> PluginMetadata:
@@ -112,7 +116,9 @@ class WikipediaPlugin(Plugin):
     async def _handle_search(self, query: str) -> PluginResponse:
         """Search Wikipedia for articles matching query."""
         try:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
+            async with httpx.AsyncClient(
+                timeout=self._timeout, headers=self._headers
+            ) as client:
                 # Use Wikipedia search API
                 response = await client.get(
                     f"https://{self._language}.wikipedia.org/w/api.php",
@@ -162,7 +168,9 @@ class WikipediaPlugin(Plugin):
     async def _handle_random(self) -> PluginResponse:
         """Get a random Wikipedia article summary."""
         try:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
+            async with httpx.AsyncClient(
+                timeout=self._timeout, headers=self._headers
+            ) as client:
                 response = await client.get(
                     f"{self._base_url}/page/random/summary",
                     follow_redirects=True,
@@ -196,7 +204,9 @@ class WikipediaPlugin(Plugin):
             # URL-encode the title
             encoded_title = title.replace(" ", "_")
 
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
+            async with httpx.AsyncClient(
+                timeout=self._timeout, headers=self._headers
+            ) as client:
                 response = await client.get(
                     f"{self._base_url}/page/summary/{encoded_title}",
                     follow_redirects=True,
