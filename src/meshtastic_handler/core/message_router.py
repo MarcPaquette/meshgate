@@ -9,33 +9,6 @@ from meshtastic_handler.interfaces.node_context import NodeContext
 from meshtastic_handler.interfaces.plugin import PluginResponse
 
 
-class MenuRenderer:
-    """Renders the main menu showing available plugins."""
-
-    def __init__(self, registry: PluginRegistry) -> None:
-        """Initialize the menu renderer.
-
-        Args:
-            registry: The plugin registry to read plugins from
-        """
-        self._registry = registry
-
-    def render(self) -> str:
-        """Render the main menu as a string.
-
-        Returns:
-            The formatted menu string
-        """
-        lines = ["Available Services:"]
-        for plugin in self._registry.get_all_plugins():
-            meta = plugin.metadata
-            lines.append(f"{meta.menu_number}. {meta.name}")
-
-        lines.append("")
-        lines.append("Send number to select")
-        return "\n".join(lines)
-
-
 @dataclass(frozen=True)
 class RouterResponse:
     """Response from the message router.
@@ -72,7 +45,21 @@ class MessageRouter:
             registry: The plugin registry containing available plugins
         """
         self._registry = registry
-        self._menu_renderer = MenuRenderer(registry)
+
+    def _render_menu(self) -> str:
+        """Render the main menu showing available plugins.
+
+        Returns:
+            The formatted menu string
+        """
+        lines = ["Available Services:"]
+        for plugin in self._registry.get_all_plugins():
+            meta = plugin.metadata
+            lines.append(f"{meta.menu_number}. {meta.name}")
+
+        lines.append("")
+        lines.append("Send number to select")
+        return "\n".join(lines)
 
     async def route(
         self, message: str, session: Session, context: NodeContext
@@ -114,7 +101,7 @@ class MessageRouter:
         """
         session.exit_plugin()
         return RouterResponse(
-            message=f"Returned to menu.\n\n{self._menu_renderer.render()}"
+            message=f"Returned to menu.\n\n{self._render_menu()}"
         )
 
     def _handle_menu(self) -> RouterResponse:
@@ -123,7 +110,7 @@ class MessageRouter:
         Returns:
             RouterResponse with menu
         """
-        return RouterResponse(message=self._menu_renderer.render())
+        return RouterResponse(message=self._render_menu())
 
     async def _handle_menu_selection(
         self, message: str, session: Session
@@ -141,7 +128,7 @@ class MessageRouter:
             menu_number = int(message)
         except ValueError:
             # Not a number - show menu again
-            menu = self._menu_renderer.render()
+            menu = self._render_menu()
             return RouterResponse(
                 message=f"Invalid selection. Please send a number.\n\n{menu}"
             )
@@ -149,7 +136,7 @@ class MessageRouter:
         plugin = self._registry.get_by_menu_number(menu_number)
         if plugin is None:
             return RouterResponse(
-                message=f"Invalid selection '{menu_number}'.\n\n{self._menu_renderer.render()}"
+                message=f"Invalid selection '{menu_number}'.\n\n{self._render_menu()}"
             )
 
         # Enter the plugin
@@ -177,7 +164,7 @@ class MessageRouter:
             # Plugin no longer exists - return to menu
             session.exit_plugin()
             return RouterResponse(
-                message=f"Plugin not available.\n\n{self._menu_renderer.render()}"
+                message=f"Plugin not available.\n\n{self._render_menu()}"
             )
 
         # Handle !help specially - show plugin's help text
@@ -197,7 +184,7 @@ class MessageRouter:
         if response.exit_plugin:
             session.exit_plugin()
             return RouterResponse(
-                message=f"{response.message}\n\n{self._menu_renderer.render()}"
+                message=f"{response.message}\n\n{self._render_menu()}"
             )
 
         return RouterResponse(
@@ -211,4 +198,4 @@ class MessageRouter:
         Returns:
             The formatted menu string
         """
-        return self._menu_renderer.render()
+        return self._render_menu()

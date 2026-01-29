@@ -3,15 +3,14 @@
 import logging
 from typing import Any
 
-import httpx
-
 from meshtastic_handler.interfaces.node_context import NodeContext
-from meshtastic_handler.interfaces.plugin import Plugin, PluginMetadata, PluginResponse
+from meshtastic_handler.interfaces.plugin import PluginMetadata, PluginResponse
+from meshtastic_handler.plugins.base import HTTPPluginBase
 
 logger = logging.getLogger(__name__)
 
 
-class LLMPlugin(Plugin):
+class LLMPlugin(HTTPPluginBase):
     """LLM Assistant plugin using Ollama.
 
     Connects to a local Ollama instance to provide AI assistant functionality.
@@ -53,10 +52,10 @@ class LLMPlugin(Plugin):
             max_response_length: Maximum response length in characters
             timeout: Request timeout in seconds
         """
+        super().__init__(timeout=timeout, service_name="Ollama")
         self._ollama_url = ollama_url.rstrip("/")
         self._default_model = model
         self._max_response_length = max_response_length
-        self._timeout = timeout
 
     @property
     def metadata(self) -> PluginMetadata:
@@ -122,36 +121,26 @@ class LLMPlugin(Plugin):
         self, current_model: str, history: list[dict[str, str]]
     ) -> PluginResponse:
         """Handle the !models command."""
-        try:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
-                response = await client.get(f"{self._ollama_url}/api/tags")
-                response.raise_for_status()
-                data = response.json()
+        result = await self._fetch_json(f"{self._ollama_url}/api/tags")
 
-            models = [m["name"] for m in data.get("models", [])]
-            if not models:
-                return PluginResponse(
-                    message="No models found.",
-                    plugin_state={"model": current_model, "history": history},
-                )
-
-            model_list = ", ".join(models[:10])  # Limit to first 10
+        if isinstance(result, PluginResponse):
             return PluginResponse(
-                message=f"Models: {model_list}\nCurrent: {current_model}",
+                message=result.message,
                 plugin_state={"model": current_model, "history": history},
             )
 
-        except httpx.ConnectError:
+        models = [m["name"] for m in result.get("models", [])]
+        if not models:
             return PluginResponse(
-                message="Cannot connect to Ollama. Is it running?",
+                message="No models found.",
                 plugin_state={"model": current_model, "history": history},
             )
-        except Exception as e:
-            logger.error(f"Error listing models: {e}")
-            return PluginResponse(
-                message=f"Error: {e}",
-                plugin_state={"model": current_model, "history": history},
-            )
+
+        model_list = ", ".join(models[:10])  # Limit to first 10
+        return PluginResponse(
+            message=f"Models: {model_list}\nCurrent: {current_model}",
+            plugin_state={"model": current_model, "history": history},
+        )
 
     async def _handle_switch_model(
         self, model_name: str, history: list[dict[str, str]]
@@ -164,46 +153,36 @@ class LLMPlugin(Plugin):
             )
 
         # Verify model exists
-        try:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
-                response = await client.get(f"{self._ollama_url}/api/tags")
-                response.raise_for_status()
-                data = response.json()
+        result = await self._fetch_json(f"{self._ollama_url}/api/tags")
 
-            models = [m["name"] for m in data.get("models", [])]
-            # Check for exact match or partial match
-            if model_name not in models:
-                # Try partial match
-                matches = [m for m in models if model_name in m]
-                if len(matches) == 1:
-                    model_name = matches[0]
-                elif matches:
-                    return PluginResponse(
-                        message=f"Multiple matches: {', '.join(matches[:5])}",
-                        plugin_state={"model": self._default_model, "history": history},
-                    )
-                else:
-                    return PluginResponse(
-                        message=f"Model '{model_name}' not found.",
-                        plugin_state={"model": self._default_model, "history": history},
-                    )
-
+        if isinstance(result, PluginResponse):
             return PluginResponse(
-                message=f"Switched to {model_name}. History cleared.",
-                plugin_state={"model": model_name, "history": []},
-            )
-
-        except httpx.ConnectError:
-            return PluginResponse(
-                message="Cannot connect to Ollama.",
+                message=result.message,
                 plugin_state={"model": self._default_model, "history": history},
             )
-        except Exception as e:
-            logger.error(f"Error switching model: {e}")
-            return PluginResponse(
-                message=f"Error: {e}",
-                plugin_state={"model": self._default_model, "history": history},
-            )
+
+        models = [m["name"] for m in result.get("models", [])]
+        # Check for exact match or partial match
+        if model_name not in models:
+            # Try partial match
+            matches = [m for m in models if model_name in m]
+            if len(matches) == 1:
+                model_name = matches[0]
+            elif matches:
+                return PluginResponse(
+                    message=f"Multiple matches: {', '.join(matches[:5])}",
+                    plugin_state={"model": self._default_model, "history": history},
+                )
+            else:
+                return PluginResponse(
+                    message=f"Model '{model_name}' not found.",
+                    plugin_state={"model": self._default_model, "history": history},
+                )
+
+        return PluginResponse(
+            message=f"Switched to {model_name}. History cleared.",
+            plugin_state={"model": model_name, "history": []},
+        )
 
     async def _handle_prompt(
         self, prompt: str, model: str, history: list[dict[str, str]]
@@ -214,60 +193,45 @@ class LLMPlugin(Plugin):
         messages.extend(history)
         messages.append({"role": "user", "content": prompt})
 
-        try:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
-                response = await client.post(
-                    f"{self._ollama_url}/api/chat",
-                    json={
-                        "model": model,
-                        "messages": messages,
-                        "stream": False,
-                        "options": {
-                            "num_predict": self.MAX_TOKENS,
-                        },
-                    },
-                )
-                response.raise_for_status()
-                data = response.json()
+        result = await self._post_json(
+            f"{self._ollama_url}/api/chat",
+            json_data={
+                "model": model,
+                "messages": messages,
+                "stream": False,
+                "options": {
+                    "num_predict": self.MAX_TOKENS,
+                },
+            },
+        )
 
-            assistant_message = data.get("message", {}).get("content", "")
-            if not assistant_message:
-                return PluginResponse(
-                    message="No response from model.",
-                    plugin_state={"model": model, "history": history},
-                )
-
-            # Truncate if needed
-            if len(assistant_message) > self._max_response_length:
-                assistant_message = (
-                    assistant_message[: self._max_response_length - 3] + "..."
-                )
-
-            # Update history (keep last 4 exchanges to manage context)
-            new_history = history.copy()
-            new_history.append({"role": "user", "content": prompt})
-            new_history.append({"role": "assistant", "content": assistant_message})
-            if len(new_history) > self.MAX_HISTORY_MESSAGES:
-                new_history = new_history[-self.MAX_HISTORY_MESSAGES:]
-
+        if isinstance(result, PluginResponse):
             return PluginResponse(
-                message=assistant_message,
-                plugin_state={"model": model, "history": new_history},
-            )
-
-        except httpx.ConnectError:
-            return PluginResponse(
-                message="Cannot connect to Ollama. Is it running?",
+                message=result.message,
                 plugin_state={"model": model, "history": history},
             )
-        except httpx.TimeoutException:
+
+        assistant_message = result.get("message", {}).get("content", "")
+        if not assistant_message:
             return PluginResponse(
-                message="Request timed out. Try a simpler question.",
+                message="No response from model.",
                 plugin_state={"model": model, "history": history},
             )
-        except Exception as e:
-            logger.error(f"Error calling Ollama: {e}")
-            return PluginResponse(
-                message=f"Error: {e}",
-                plugin_state={"model": model, "history": history},
+
+        # Truncate if needed
+        if len(assistant_message) > self._max_response_length:
+            assistant_message = (
+                assistant_message[: self._max_response_length - 3] + "..."
             )
+
+        # Update history (keep last 4 exchanges to manage context)
+        new_history = history.copy()
+        new_history.append({"role": "user", "content": prompt})
+        new_history.append({"role": "assistant", "content": assistant_message})
+        if len(new_history) > self.MAX_HISTORY_MESSAGES:
+            new_history = new_history[-self.MAX_HISTORY_MESSAGES:]
+
+        return PluginResponse(
+            message=assistant_message,
+            plugin_state={"model": model, "history": new_history},
+        )

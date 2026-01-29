@@ -24,11 +24,6 @@ class TestWeatherPlugin:
             location=GPSLocation(latitude=40.7128, longitude=-74.0060),
         )
 
-    @pytest.fixture
-    def context_no_gps(self) -> NodeContext:
-        """Create test NodeContext without GPS."""
-        return NodeContext(node_id="!test123")
-
     def test_metadata(self, plugin: WeatherPlugin) -> None:
         """Test plugin metadata."""
         meta = plugin.metadata
@@ -51,10 +46,10 @@ class TestWeatherPlugin:
 
     @pytest.mark.asyncio
     async def test_no_gps_error(
-        self, plugin: WeatherPlugin, context_no_gps: NodeContext
+        self, plugin: WeatherPlugin, context: NodeContext
     ) -> None:
         """Test error when no GPS location available."""
-        response = await plugin.handle("!refresh", context_no_gps, {})
+        response = await plugin.handle("!refresh", context, {})
 
         assert "GPS" in response.message or "location" in response.message.lower()
 

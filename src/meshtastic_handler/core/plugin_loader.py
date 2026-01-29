@@ -2,6 +2,7 @@
 
 import importlib
 import importlib.util
+import inspect
 import logging
 from pathlib import Path
 
@@ -147,6 +148,7 @@ class PluginLoader:
                 isinstance(obj, type)
                 and issubclass(obj, Plugin)
                 and obj is not Plugin
+                and not inspect.isabstract(obj)
             ):
                 plugin_classes.append(obj)
 

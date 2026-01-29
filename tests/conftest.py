@@ -27,6 +27,12 @@ def node_context_no_gps() -> NodeContext:
 
 
 @pytest.fixture
+def context() -> NodeContext:
+    """Create a simple test NodeContext (alias for common test use)."""
+    return NodeContext(node_id="!test123")
+
+
+@pytest.fixture
 def session() -> Session:
     """Create a test Session."""
     return Session(node_id="!test123")

@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from meshtastic_handler.core.message_router import MenuRenderer, MessageRouter
+from meshtastic_handler.core.message_router import MessageRouter
 from meshtastic_handler.core.plugin_registry import PluginRegistry
 from meshtastic_handler.core.session import Session
 from meshtastic_handler.interfaces.node_context import NodeContext
@@ -35,35 +35,31 @@ class ExceptionPlugin(Plugin):
         raise RuntimeError("Plugin crashed!")
 
 
-class TestMenuRenderer:
-    """Tests for MenuRenderer class."""
+class TestMessageRouter:
+    """Tests for MessageRouter class."""
 
-    def test_render_empty_registry(self) -> None:
-        """Test rendering menu with no plugins."""
+    def test_get_menu_empty_registry(self) -> None:
+        """Test get_menu with no plugins."""
         registry = PluginRegistry()
-        renderer = MenuRenderer(registry)
+        router = MessageRouter(registry)
 
-        result = renderer.render()
+        result = router.get_menu()
         assert "Available Services:" in result
         assert "Send number to select" in result
 
-    def test_render_with_plugins(self) -> None:
-        """Test rendering menu with plugins."""
+    def test_get_menu_with_plugins(self) -> None:
+        """Test get_menu with plugins."""
         registry = PluginRegistry()
         registry.register(MockPlugin(name="Gopher Server", menu_number=1))
         registry.register(MockPlugin(name="LLM Assistant", menu_number=2))
+        router = MessageRouter(registry)
 
-        renderer = MenuRenderer(registry)
-        result = renderer.render()
+        result = router.get_menu()
 
         assert "Available Services:" in result
         assert "1. Gopher Server" in result
         assert "2. LLM Assistant" in result
         assert "Send number to select" in result
-
-
-class TestMessageRouter:
-    """Tests for MessageRouter class."""
 
     @pytest.fixture
     def router_with_plugin(self) -> tuple[MessageRouter, MockPlugin, PluginRegistry]:

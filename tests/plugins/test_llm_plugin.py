@@ -21,11 +21,6 @@ class TestLLMPlugin:
             timeout=5.0,
         )
 
-    @pytest.fixture
-    def context(self) -> NodeContext:
-        """Create test NodeContext."""
-        return NodeContext(node_id="!test123")
-
     def test_metadata(self, plugin: LLMPlugin) -> None:
         """Test plugin metadata."""
         meta = plugin.metadata
@@ -178,7 +173,7 @@ class TestLLMPlugin:
         )
 
         # Should return error message, not crash
-        assert "Error" in response.message or "Cannot connect" in response.message
+        assert "error" in response.message.lower() or "connect" in response.message.lower()
 
     @pytest.mark.asyncio
     @respx.mock

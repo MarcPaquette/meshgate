@@ -20,11 +20,6 @@ class TestWikipediaPlugin:
             timeout=5.0,
         )
 
-    @pytest.fixture
-    def context(self) -> NodeContext:
-        """Create test NodeContext."""
-        return NodeContext(node_id="!test123")
-
     def test_metadata(self, plugin: WikipediaPlugin) -> None:
         """Test plugin metadata."""
         meta = plugin.metadata

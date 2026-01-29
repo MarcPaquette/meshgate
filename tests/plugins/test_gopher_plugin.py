@@ -32,11 +32,6 @@ class TestGopherPlugin:
         """Create a GopherPlugin with temp directory."""
         return GopherPlugin(root_directory=str(temp_gopher_dir))
 
-    @pytest.fixture
-    def context(self) -> NodeContext:
-        """Create test NodeContext."""
-        return NodeContext(node_id="!test123")
-
     def test_metadata(self, plugin: GopherPlugin) -> None:
         """Test plugin metadata."""
         meta = plugin.metadata

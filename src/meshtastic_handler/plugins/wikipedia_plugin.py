@@ -3,15 +3,14 @@
 import logging
 from typing import Any
 
-import httpx
-
 from meshtastic_handler.interfaces.node_context import NodeContext
-from meshtastic_handler.interfaces.plugin import Plugin, PluginMetadata, PluginResponse
+from meshtastic_handler.interfaces.plugin import PluginMetadata, PluginResponse
+from meshtastic_handler.plugins.base import HTTPPluginBase
 
 logger = logging.getLogger(__name__)
 
 
-class WikipediaPlugin(Plugin):
+class WikipediaPlugin(HTTPPluginBase):
     """Wikipedia search and summary plugin.
 
     Search Wikipedia and get article summaries optimized for Meshtastic.
@@ -41,9 +40,9 @@ class WikipediaPlugin(Plugin):
             max_summary_length: Maximum summary length in characters
             timeout: Request timeout in seconds
         """
+        super().__init__(timeout=timeout, service_name="Wikipedia")
         self._language = language
         self._max_summary_length = max_summary_length
-        self._timeout = timeout
         self._base_url = f"https://{language}.wikipedia.org/api/rest_v1"
         self._headers = {"User-Agent": self.USER_AGENT}
 
@@ -115,128 +114,94 @@ class WikipediaPlugin(Plugin):
 
     async def _handle_search(self, query: str) -> PluginResponse:
         """Search Wikipedia for articles matching query."""
-        try:
-            async with httpx.AsyncClient(
-                timeout=self._timeout, headers=self._headers
-            ) as client:
-                # Use Wikipedia search API
-                response = await client.get(
-                    f"https://{self._language}.wikipedia.org/w/api.php",
-                    params={
-                        "action": "opensearch",
-                        "search": query,
-                        "limit": 5,
-                        "namespace": 0,
-                        "format": "json",
-                    },
-                )
-                response.raise_for_status()
-                data = response.json()
+        result = await self._fetch_json(
+            f"https://{self._language}.wikipedia.org/w/api.php",
+            params={
+                "action": "opensearch",
+                "search": query,
+                "limit": 5,
+                "namespace": 0,
+                "format": "json",
+            },
+            headers=self._headers,
+        )
 
-            # opensearch returns: [query, [titles], [descriptions], [urls]]
-            titles = data[1] if len(data) > 1 else []
+        if isinstance(result, PluginResponse):
+            return result
 
-            if not titles:
-                return PluginResponse(
-                    message=f"No results for '{query}'.",
-                    plugin_state={"last_results": []},
-                )
+        # opensearch returns: [query, [titles], [descriptions], [urls]]
+        titles = result[1] if len(result) > 1 else []
 
-            # If only one result, show summary directly
-            if len(titles) == 1:
-                return await self._get_summary(titles[0])
-
-            # Multiple results - show numbered list
-            lines = [f"Results for '{query}':"]
-            for i, title in enumerate(titles, 1):
-                lines.append(f"{i}. {title}")
-            lines.append("\nSend number to select")
-
+        if not titles:
             return PluginResponse(
-                message="\n".join(lines),
-                plugin_state={"last_results": titles, "last_query": query},
+                message=f"No results for '{query}'.",
+                plugin_state={"last_results": []},
             )
 
-        except httpx.ConnectError:
-            return PluginResponse(message="Cannot connect to Wikipedia.")
-        except httpx.TimeoutException:
-            return PluginResponse(message="Search timed out.")
-        except Exception as e:
-            logger.error(f"Wikipedia search error: {e}")
-            return PluginResponse(message=f"Search error: {e}")
+        # If only one result, show summary directly
+        if len(titles) == 1:
+            return await self._get_summary(titles[0])
+
+        # Multiple results - show numbered list
+        lines = [f"Results for '{query}':"]
+        for i, title in enumerate(titles, 1):
+            lines.append(f"{i}. {title}")
+        lines.append("\nSend number to select")
+
+        return PluginResponse(
+            message="\n".join(lines),
+            plugin_state={"last_results": titles, "last_query": query},
+        )
 
     async def _handle_random(self) -> PluginResponse:
         """Get a random Wikipedia article summary."""
-        try:
-            async with httpx.AsyncClient(
-                timeout=self._timeout, headers=self._headers
-            ) as client:
-                response = await client.get(
-                    f"{self._base_url}/page/random/summary",
-                    follow_redirects=True,
-                )
-                response.raise_for_status()
-                data = response.json()
+        result = await self._fetch_json(
+            f"{self._base_url}/page/random/summary",
+            headers=self._headers,
+        )
 
-            title = data.get("title", "Unknown")
-            extract = data.get("extract", "No content available.")
+        if isinstance(result, PluginResponse):
+            return result
 
-            # Truncate if needed
-            if len(extract) > self._max_summary_length:
-                extract = extract[: self._max_summary_length - 3] + "..."
+        title = result.get("title", "Unknown")
+        extract = result.get("extract", "No content available.")
 
-            return PluginResponse(
-                message=f"{title}\n\n{extract}",
-                plugin_state={"last_title": title},
-            )
+        # Truncate if needed
+        if len(extract) > self._max_summary_length:
+            extract = extract[: self._max_summary_length - 3] + "..."
 
-        except httpx.ConnectError:
-            return PluginResponse(message="Cannot connect to Wikipedia.")
-        except httpx.TimeoutException:
-            return PluginResponse(message="Request timed out.")
-        except Exception as e:
-            logger.error(f"Wikipedia random error: {e}")
-            return PluginResponse(message=f"Error: {e}")
+        return PluginResponse(
+            message=f"{title}\n\n{extract}",
+            plugin_state={"last_title": title},
+        )
 
     async def _get_summary(self, title: str) -> PluginResponse:
         """Get summary for a specific article title."""
-        try:
-            # URL-encode the title
-            encoded_title = title.replace(" ", "_")
+        # URL-encode the title
+        encoded_title = title.replace(" ", "_")
 
-            async with httpx.AsyncClient(
-                timeout=self._timeout, headers=self._headers
-            ) as client:
-                response = await client.get(
-                    f"{self._base_url}/page/summary/{encoded_title}",
-                    follow_redirects=True,
-                )
-                response.raise_for_status()
-                data = response.json()
+        result = await self._fetch_json(
+            f"{self._base_url}/page/summary/{encoded_title}",
+            headers=self._headers,
+        )
 
-            display_title = data.get("title", title)
-            extract = data.get("extract", "No content available.")
-
-            # Truncate if needed
-            if len(extract) > self._max_summary_length:
-                extract = extract[: self._max_summary_length - 3] + "..."
-
-            return PluginResponse(
-                message=f"{display_title}\n\n{extract}",
-                plugin_state={"last_title": display_title, "last_results": []},
-            )
-
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 404:
+        if isinstance(result, PluginResponse):
+            # Check for 404 in the error message
+            if "HTTP 404" in result.message:
                 return PluginResponse(
                     message=f"Article '{title}' not found.",
                     plugin_state={"last_results": []},
                 )
-            raise
-        except httpx.ConnectError:
-            return PluginResponse(message="Cannot connect to Wikipedia.")
-        except httpx.TimeoutException:
-            return PluginResponse(message="Request timed out.")
-        except Exception as e:
-            logger.error(f"Wikipedia summary error: {e}")
-            return PluginResponse(message=f"Error: {e}")
+            return result
+
+        display_title = result.get("title", title)
+        extract = result.get("extract", "No content available.")
+
+        # Truncate if needed
+        if len(extract) > self._max_summary_length:
+            extract = extract[: self._max_summary_length - 3] + "..."
+
+        return PluginResponse(
+            message=f"{display_title}\n\n{extract}",
+            plugin_state={"last_title": display_title, "last_results": []},
+        )

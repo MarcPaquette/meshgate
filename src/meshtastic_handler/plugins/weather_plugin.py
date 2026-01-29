@@ -3,10 +3,9 @@
 import logging
 from typing import Any
 
-import httpx
-
 from meshtastic_handler.interfaces.node_context import NodeContext
-from meshtastic_handler.interfaces.plugin import Plugin, PluginMetadata, PluginResponse
+from meshtastic_handler.interfaces.plugin import PluginMetadata, PluginResponse
+from meshtastic_handler.plugins.base import HTTPPluginBase
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +43,7 @@ WMO_CODES = {
 }
 
 
-class WeatherPlugin(Plugin):
+class WeatherPlugin(HTTPPluginBase):
     """Weather plugin using Open-Meteo API.
 
     Uses the node's GPS location to fetch current weather conditions.
@@ -65,7 +64,7 @@ class WeatherPlugin(Plugin):
         Args:
             timeout: Request timeout in seconds
         """
-        self._timeout = timeout
+        super().__init__(timeout=timeout, service_name="weather service")
 
     @property
     def metadata(self) -> PluginMetadata:
@@ -125,114 +124,96 @@ class WeatherPlugin(Plugin):
         self, lat: float, lon: float
     ) -> PluginResponse:
         """Fetch and display current weather."""
-        try:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
-                response = await client.get(
-                    self.OPEN_METEO_URL,
-                    params={
-                        "latitude": lat,
-                        "longitude": lon,
-                        "current": [
-                            "temperature_2m",
-                            "relative_humidity_2m",
-                            "weather_code",
-                            "wind_speed_10m",
-                            "wind_direction_10m",
-                        ],
-                        "temperature_unit": "celsius",
-                        "wind_speed_unit": "kmh",
-                    },
-                )
-                response.raise_for_status()
-                data = response.json()
+        result = await self._fetch_json(
+            self.OPEN_METEO_URL,
+            params={
+                "latitude": lat,
+                "longitude": lon,
+                "current": [
+                    "temperature_2m",
+                    "relative_humidity_2m",
+                    "weather_code",
+                    "wind_speed_10m",
+                    "wind_direction_10m",
+                ],
+                "temperature_unit": "celsius",
+                "wind_speed_unit": "kmh",
+            },
+        )
 
-            current = data.get("current", {})
-            temp = current.get("temperature_2m", "?")
-            humidity = current.get("relative_humidity_2m", "?")
-            weather_code = current.get("weather_code", 0)
-            wind_speed = current.get("wind_speed_10m", "?")
-            wind_dir = current.get("wind_direction_10m", 0)
+        if isinstance(result, PluginResponse):
+            return result
 
-            condition = WMO_CODES.get(weather_code, "Unknown")
-            wind_cardinal = self._degrees_to_cardinal(wind_dir)
+        current = result.get("current", {})
+        temp = current.get("temperature_2m", "?")
+        humidity = current.get("relative_humidity_2m", "?")
+        weather_code = current.get("weather_code", 0)
+        wind_speed = current.get("wind_speed_10m", "?")
+        wind_dir = current.get("wind_direction_10m", 0)
 
-            weather_text = (
-                f"Current Weather:\n"
-                f"{condition}\n"
-                f"Temp: {temp}C\n"
-                f"Humidity: {humidity}%\n"
-                f"Wind: {wind_speed}km/h {wind_cardinal}"
-            )
+        condition = WMO_CODES.get(weather_code, "Unknown")
+        wind_cardinal = self._degrees_to_cardinal(wind_dir)
 
-            return PluginResponse(
-                message=weather_text,
-                plugin_state={"last_lat": lat, "last_lon": lon},
-            )
+        weather_text = (
+            f"Current Weather:\n"
+            f"{condition}\n"
+            f"Temp: {temp}C\n"
+            f"Humidity: {humidity}%\n"
+            f"Wind: {wind_speed}km/h {wind_cardinal}"
+        )
 
-        except httpx.ConnectError:
-            return PluginResponse(message="Cannot connect to weather service.")
-        except httpx.TimeoutException:
-            return PluginResponse(message="Weather request timed out.")
-        except Exception as e:
-            logger.error(f"Weather API error: {e}")
-            return PluginResponse(message=f"Weather error: {e}")
+        return PluginResponse(
+            message=weather_text,
+            plugin_state={"last_lat": lat, "last_lon": lon},
+        )
 
     async def _handle_forecast(self, lat: float, lon: float) -> PluginResponse:
         """Fetch and display 3-day forecast."""
-        try:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
-                response = await client.get(
-                    self.OPEN_METEO_URL,
-                    params={
-                        "latitude": lat,
-                        "longitude": lon,
-                        "daily": [
-                            "weather_code",
-                            "temperature_2m_max",
-                            "temperature_2m_min",
-                        ],
-                        "temperature_unit": "celsius",
-                        "forecast_days": 3,
-                    },
-                )
-                response.raise_for_status()
-                data = response.json()
+        result = await self._fetch_json(
+            self.OPEN_METEO_URL,
+            params={
+                "latitude": lat,
+                "longitude": lon,
+                "daily": [
+                    "weather_code",
+                    "temperature_2m_max",
+                    "temperature_2m_min",
+                ],
+                "temperature_unit": "celsius",
+                "forecast_days": 3,
+            },
+        )
 
-            daily = data.get("daily", {})
-            dates = daily.get("time", [])
-            codes = daily.get("weather_code", [])
-            highs = daily.get("temperature_2m_max", [])
-            lows = daily.get("temperature_2m_min", [])
+        if isinstance(result, PluginResponse):
+            return result
 
-            lines = ["3-Day Forecast:"]
-            for i, date in enumerate(dates[:3]):
-                # Format date as Mon, Tue, etc.
-                from datetime import datetime
+        daily = result.get("daily", {})
+        dates = daily.get("time", [])
+        codes = daily.get("weather_code", [])
+        highs = daily.get("temperature_2m_max", [])
+        lows = daily.get("temperature_2m_min", [])
 
-                try:
-                    dt = datetime.fromisoformat(date)
-                    day_name = dt.strftime("%a")
-                except Exception:
-                    day_name = date
+        lines = ["3-Day Forecast:"]
+        for i, date in enumerate(dates[:3]):
+            # Format date as Mon, Tue, etc.
+            from datetime import datetime
 
-                condition = WMO_CODES.get(codes[i] if i < len(codes) else 0, "?")
-                high = highs[i] if i < len(highs) else "?"
-                low = lows[i] if i < len(lows) else "?"
+            try:
+                dt = datetime.fromisoformat(date)
+                day_name = dt.strftime("%a")
+            except Exception:
+                day_name = date
 
-                lines.append(f"{day_name}: {condition} {low}-{high}C")
+            condition = WMO_CODES.get(codes[i] if i < len(codes) else 0, "?")
+            high = highs[i] if i < len(highs) else "?"
+            low = lows[i] if i < len(lows) else "?"
 
-            return PluginResponse(
-                message="\n".join(lines),
-                plugin_state={"last_lat": lat, "last_lon": lon},
-            )
+            lines.append(f"{day_name}: {condition} {low}-{high}C")
 
-        except httpx.ConnectError:
-            return PluginResponse(message="Cannot connect to weather service.")
-        except httpx.TimeoutException:
-            return PluginResponse(message="Weather request timed out.")
-        except Exception as e:
-            logger.error(f"Forecast API error: {e}")
-            return PluginResponse(message=f"Forecast error: {e}")
+        return PluginResponse(
+            message="\n".join(lines),
+            plugin_state={"last_lat": lat, "last_lon": lon},
+        )
 
     def _degrees_to_cardinal(self, degrees: float) -> str:
         """Convert degrees to cardinal direction."""
