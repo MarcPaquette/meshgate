@@ -96,9 +96,7 @@ class GopherPlugin(Plugin):
         parent = current.parent
         if self._is_within_root(parent):
             listing = self._list_directory(parent)
-            return PluginResponse(
-                message=listing, plugin_state={"current_path": str(parent)}
-            )
+            return PluginResponse(message=listing, plugin_state={"current_path": str(parent)})
         else:
             listing = self._list_directory(self._root)
             return PluginResponse(
@@ -109,9 +107,7 @@ class GopherPlugin(Plugin):
     def _handle_home(self) -> PluginResponse:
         """Handle the !home command."""
         listing = self._list_directory(self._root)
-        return PluginResponse(
-            message=listing, plugin_state={"current_path": str(self._root)}
-        )
+        return PluginResponse(message=listing, plugin_state={"current_path": str(self._root)})
 
     def _handle_selection(self, current: Path, selection: int) -> PluginResponse:
         """Handle numeric selection."""

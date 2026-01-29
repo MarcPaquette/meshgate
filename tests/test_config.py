@@ -61,9 +61,7 @@ plugins:
     ollama_url: "http://localhost:11434"
     model: "phi3"
 """
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(yaml_content)
             f.flush()
 
@@ -98,9 +96,7 @@ plugins:
         config = Config.default()
         config.server.max_message_size = 123
 
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             temp_path = f.name
 
         config.save_yaml(temp_path)
@@ -114,9 +110,7 @@ plugins:
 
     def test_empty_yaml(self) -> None:
         """Test loading empty YAML uses defaults."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write("")
             f.flush()
 
@@ -133,9 +127,7 @@ plugins:
   weather:
     timeout: 5.0
 """
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(yaml_content)
             f.flush()
 

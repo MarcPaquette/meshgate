@@ -23,9 +23,7 @@ class TestHandlerServer:
         config = Config.default()
         return HandlerServer(config=config, transport=mock_transport)
 
-    def test_initialization_with_default_config(
-        self, mock_transport: MockTransport
-    ) -> None:
+    def test_initialization_with_default_config(self, mock_transport: MockTransport) -> None:
         """Test server initializes with default config."""
         server = HandlerServer(transport=mock_transport)
 
@@ -33,9 +31,7 @@ class TestHandlerServer:
         assert server.session_manager is not None
         assert not server.is_running
 
-    def test_initialization_with_custom_config(
-        self, mock_transport: MockTransport
-    ) -> None:
+    def test_initialization_with_custom_config(self, mock_transport: MockTransport) -> None:
         """Test server initializes with custom config."""
         config = Config.default()
         config.server.max_message_size = 100
@@ -219,9 +215,7 @@ class TestHandlerServerLifecycle:
         assert "Available Services:" in message
 
     @pytest.mark.asyncio
-    async def test_chunked_response(
-        self, mock_transport: MockTransport
-    ) -> None:
+    async def test_chunked_response(self, mock_transport: MockTransport) -> None:
         """Test long responses are chunked when message exceeds max_size."""
         config = Config.default()
         config.server.max_message_size = 30  # Very small to force chunking

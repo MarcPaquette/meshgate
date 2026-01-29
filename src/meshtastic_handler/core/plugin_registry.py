@@ -1,6 +1,5 @@
 """Plugin registry for plugin discovery and registration."""
 
-
 from meshtastic_handler.interfaces.plugin import Plugin
 
 
@@ -32,9 +31,7 @@ class PluginRegistry:
             raise ValueError(f"Plugin '{name}' is already registered")
         if menu_number in self._menu_index:
             existing = self._menu_index[menu_number]
-            raise ValueError(
-                f"Menu number {menu_number} is already used by '{existing}'"
-            )
+            raise ValueError(f"Menu number {menu_number} is already used by '{existing}'")
 
         self._plugins[name] = plugin
         self._menu_index[menu_number] = name

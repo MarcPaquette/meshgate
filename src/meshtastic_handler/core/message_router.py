@@ -61,9 +61,7 @@ class MessageRouter:
         lines.append("Send number to select")
         return "\n".join(lines)
 
-    async def route(
-        self, message: str, session: Session, context: NodeContext
-    ) -> RouterResponse:
+    async def route(self, message: str, session: Session, context: NodeContext) -> RouterResponse:
         """Route a message to the appropriate handler.
 
         Args:
@@ -100,9 +98,7 @@ class MessageRouter:
             RouterResponse with menu
         """
         session.exit_plugin()
-        return RouterResponse(
-            message=f"Returned to menu.\n\n{self._render_menu()}"
-        )
+        return RouterResponse(message=f"Returned to menu.\n\n{self._render_menu()}")
 
     def _handle_menu(self) -> RouterResponse:
         """Handle the !menu command.
@@ -112,9 +108,7 @@ class MessageRouter:
         """
         return RouterResponse(message=self._render_menu())
 
-    async def _handle_menu_selection(
-        self, message: str, session: Session
-    ) -> RouterResponse:
+    async def _handle_menu_selection(self, message: str, session: Session) -> RouterResponse:
         """Handle menu number selection.
 
         Args:
@@ -129,9 +123,7 @@ class MessageRouter:
         except ValueError:
             # Not a number - show menu again
             menu = self._render_menu()
-            return RouterResponse(
-                message=f"Invalid selection. Please send a number.\n\n{menu}"
-            )
+            return RouterResponse(message=f"Invalid selection. Please send a number.\n\n{menu}")
 
         plugin = self._registry.get_by_menu_number(menu_number)
         if plugin is None:
@@ -163,18 +155,14 @@ class MessageRouter:
         if plugin is None:
             # Plugin no longer exists - return to menu
             session.exit_plugin()
-            return RouterResponse(
-                message=f"Plugin not available.\n\n{self._render_menu()}"
-            )
+            return RouterResponse(message=f"Plugin not available.\n\n{self._render_menu()}")
 
         # Handle !help specially - show plugin's help text
         if message.lower() == self.HELP_COMMAND:
             return RouterResponse(message=plugin.get_help_text())
 
         # Route to plugin
-        response: PluginResponse = await plugin.handle(
-            message, context, session.plugin_state
-        )
+        response: PluginResponse = await plugin.handle(message, context, session.plugin_state)
 
         # Update state if provided
         if response.plugin_state is not None:
@@ -183,9 +171,7 @@ class MessageRouter:
         # Check if plugin wants to exit
         if response.exit_plugin:
             session.exit_plugin()
-            return RouterResponse(
-                message=f"{response.message}\n\n{self._render_menu()}"
-            )
+            return RouterResponse(message=f"{response.message}\n\n{self._render_menu()}")
 
         return RouterResponse(
             message=response.message,

@@ -52,9 +52,7 @@ class HandlerServer:
             session_timeout_minutes=self._config.server.session_timeout_minutes
         )
         self._router = MessageRouter(self._registry)
-        self._chunker = ContentChunker(
-            max_size=self._config.server.max_message_size
-        )
+        self._chunker = ContentChunker(max_size=self._config.server.max_message_size)
 
         # Create or use provided transport
         if transport is not None:
@@ -73,9 +71,7 @@ class HandlerServer:
     def _register_builtin_plugins(self) -> None:
         """Register the built-in plugins based on configuration."""
         # Gopher plugin
-        gopher = GopherPlugin(
-            root_directory=self._config.plugins.gopher.root_directory
-        )
+        gopher = GopherPlugin(root_directory=self._config.plugins.gopher.root_directory)
         self._registry.register(gopher)
 
         # LLM plugin
@@ -88,9 +84,7 @@ class HandlerServer:
         self._registry.register(llm)
 
         # Weather plugin
-        weather = WeatherPlugin(
-            timeout=self._config.plugins.weather.timeout
-        )
+        weather = WeatherPlugin(timeout=self._config.plugins.weather.timeout)
         self._registry.register(weather)
 
         # Wikipedia plugin
@@ -150,9 +144,7 @@ class HandlerServer:
                 response_text = self._router.get_menu()
             else:
                 # Route message
-                response = await self._router.route(
-                    incoming.text, session, incoming.context
-                )
+                response = await self._router.route(incoming.text, session, incoming.context)
                 response_text = response.message
 
             # Send response (chunked if necessary)
@@ -162,9 +154,7 @@ class HandlerServer:
             logger.error(f"Error handling message: {e}")
             # Try to send error response
             try:
-                await self._send_response(
-                    incoming.context.node_id, f"Error: {e}"
-                )
+                await self._send_response(incoming.context.node_id, f"Error: {e}")
             except Exception:
                 pass
 

@@ -220,16 +220,14 @@ class LLMPlugin(HTTPPluginBase):
 
         # Truncate if needed
         if len(assistant_message) > self._max_response_length:
-            assistant_message = (
-                assistant_message[: self._max_response_length - 3] + "..."
-            )
+            assistant_message = assistant_message[: self._max_response_length - 3] + "..."
 
         # Update history (keep last 4 exchanges to manage context)
         new_history = history.copy()
         new_history.append({"role": "user", "content": prompt})
         new_history.append({"role": "assistant", "content": assistant_message})
         if len(new_history) > self.MAX_HISTORY_MESSAGES:
-            new_history = new_history[-self.MAX_HISTORY_MESSAGES:]
+            new_history = new_history[-self.MAX_HISTORY_MESSAGES :]
 
         return PluginResponse(
             message=assistant_message,

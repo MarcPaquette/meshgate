@@ -58,10 +58,7 @@ class WikipediaPlugin(HTTPPluginBase):
 
     def get_welcome_message(self) -> str:
         """Message shown when user enters this plugin."""
-        return (
-            "Wikipedia Search\n"
-            "Send a topic to search or !help for commands."
-        )
+        return "Wikipedia Search\nSend a topic to search or !help for commands."
 
     def get_help_text(self) -> str:
         """Help text showing plugin-specific commands."""
@@ -89,9 +86,7 @@ class WikipediaPlugin(HTTPPluginBase):
             query = message[7:].strip() if len(message) > 7 else ""
             if query:
                 return await self._handle_search(query)
-            return PluginResponse(
-                message="Usage: !search <query>", plugin_state=plugin_state
-            )
+            return PluginResponse(message="Usage: !search <query>", plugin_state=plugin_state)
 
         # Check if there's a last search with numbered results
         last_results = plugin_state.get("last_results", [])
@@ -108,9 +103,7 @@ class WikipediaPlugin(HTTPPluginBase):
         if message:
             return await self._handle_search(message)
 
-        return PluginResponse(
-            message="Send a topic to search.", plugin_state=plugin_state
-        )
+        return PluginResponse(message="Send a topic to search.", plugin_state=plugin_state)
 
     async def _handle_search(self, query: str) -> PluginResponse:
         """Search Wikipedia for articles matching query."""

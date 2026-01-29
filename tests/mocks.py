@@ -38,9 +38,7 @@ class MockTransport(MessageTransport):
     async def listen(self) -> AsyncIterator[IncomingMessage]:
         while self._connected:
             try:
-                message = await asyncio.wait_for(
-                    self._message_queue.get(), timeout=0.1
-                )
+                message = await asyncio.wait_for(self._message_queue.get(), timeout=0.1)
                 yield message
             except TimeoutError:
                 continue

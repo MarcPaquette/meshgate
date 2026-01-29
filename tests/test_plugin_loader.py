@@ -18,9 +18,7 @@ class TestPluginLoader:
 
     def test_load_builtin_plugin(self, loader: PluginLoader) -> None:
         """Test loading a built-in plugin by module path."""
-        plugin = loader.load_plugin(
-            "meshtastic_handler.plugins.weather_plugin"
-        )
+        plugin = loader.load_plugin("meshtastic_handler.plugins.weather_plugin")
         assert plugin.metadata.name == "Weather"
 
     def test_load_nonexistent_module(self, loader: PluginLoader) -> None:
@@ -30,7 +28,7 @@ class TestPluginLoader:
 
     def test_load_plugin_from_file(self, loader: PluginLoader) -> None:
         """Test loading plugin from a Python file."""
-        plugin_code = '''
+        plugin_code = """
 from typing import Any
 from meshtastic_handler.interfaces.plugin import Plugin, PluginMetadata, PluginResponse
 from meshtastic_handler.interfaces.node_context import NodeContext
@@ -54,10 +52,8 @@ class TestFilePlugin(Plugin):
         self, message: str, context: NodeContext, plugin_state: dict[str, Any]
     ) -> PluginResponse:
         return PluginResponse(message="Response from file")
-'''
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".py", delete=False
-        ) as f:
+"""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
             f.write(plugin_code)
             plugin_path = f.name
 
@@ -75,9 +71,7 @@ class TestFilePlugin(Plugin):
 
     def test_load_from_non_python_file(self, loader: PluginLoader) -> None:
         """Test loading from non-.py file raises error."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".txt", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
             f.write("not python")
             file_path = f.name
 
@@ -89,9 +83,7 @@ class TestFilePlugin(Plugin):
 
     def test_load_file_without_plugin_class(self, loader: PluginLoader) -> None:
         """Test loading file without Plugin subclass raises error."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".py", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
             f.write("class NotAPlugin:\n    pass\n")
             file_path = f.name
 
@@ -107,18 +99,14 @@ class TestFilePlugin(Plugin):
             plugins = loader.discover_plugins(tmpdir)
             assert plugins == []
 
-    def test_discover_plugins_nonexistent_directory(
-        self, loader: PluginLoader
-    ) -> None:
+    def test_discover_plugins_nonexistent_directory(self, loader: PluginLoader) -> None:
         """Test discovering plugins in nonexistent directory returns empty."""
         plugins = loader.discover_plugins("/nonexistent/directory")
         assert plugins == []
 
-    def test_discover_plugins_skips_private_files(
-        self, loader: PluginLoader
-    ) -> None:
+    def test_discover_plugins_skips_private_files(self, loader: PluginLoader) -> None:
         """Test that files starting with underscore are skipped."""
-        plugin_code = '''
+        plugin_code = """
 from typing import Any
 from meshtastic_handler.interfaces.plugin import Plugin, PluginMetadata, PluginResponse
 from meshtastic_handler.interfaces.node_context import NodeContext
@@ -138,7 +126,7 @@ class PrivatePlugin(Plugin):
         self, message: str, context: NodeContext, plugin_state: dict[str, Any]
     ) -> PluginResponse:
         return PluginResponse(message="")
-'''
+"""
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create a private file that should be skipped
             private_file = Path(tmpdir) / "_private_plugin.py"

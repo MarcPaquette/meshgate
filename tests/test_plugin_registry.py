@@ -36,9 +36,7 @@ class TestPluginRegistry:
         with pytest.raises(ValueError, match="already registered"):
             plugin_registry.register(plugin2)
 
-    def test_register_duplicate_menu_number(
-        self, plugin_registry: PluginRegistry
-    ) -> None:
+    def test_register_duplicate_menu_number(self, plugin_registry: PluginRegistry) -> None:
         """Test that duplicate menu numbers raise error."""
         plugin1 = MockPlugin(name="Plugin 1", menu_number=1)
         plugin2 = MockPlugin(name="Plugin 2", menu_number=1)
@@ -68,9 +66,7 @@ class TestPluginRegistry:
         result = plugin_registry.get_by_menu_number(5)
         assert result is plugin
 
-    def test_get_by_menu_number_not_found(
-        self, plugin_registry: PluginRegistry
-    ) -> None:
+    def test_get_by_menu_number_not_found(self, plugin_registry: PluginRegistry) -> None:
         """Test getting non-existent plugin by menu number."""
         result = plugin_registry.get_by_menu_number(99)
         assert result is None

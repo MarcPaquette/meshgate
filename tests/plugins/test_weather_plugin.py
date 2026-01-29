@@ -45,9 +45,7 @@ class TestWeatherPlugin:
         assert "!exit" in help_text
 
     @pytest.mark.asyncio
-    async def test_no_gps_error(
-        self, plugin: WeatherPlugin, context: NodeContext
-    ) -> None:
+    async def test_no_gps_error(self, plugin: WeatherPlugin, context: NodeContext) -> None:
         """Test error when no GPS location available."""
         response = await plugin.handle("!refresh", context, {})
 
@@ -83,9 +81,7 @@ class TestWeatherPlugin:
 
     @pytest.mark.asyncio
     @respx.mock
-    async def test_forecast(
-        self, plugin: WeatherPlugin, context_with_gps: NodeContext
-    ) -> None:
+    async def test_forecast(self, plugin: WeatherPlugin, context_with_gps: NodeContext) -> None:
         """Test fetching forecast."""
         respx.get("https://api.open-meteo.com/v1/forecast").mock(
             return_value=Response(
@@ -120,10 +116,7 @@ class TestWeatherPlugin:
         response = await plugin.handle("!refresh", context_with_gps, {})
 
         # Should return error message, not crash
-        assert (
-            "error" in response.message.lower()
-            or "connect" in response.message.lower()
-        )
+        assert "error" in response.message.lower() or "connect" in response.message.lower()
 
     def test_degrees_to_cardinal(self, plugin: WeatherPlugin) -> None:
         """Test wind direction conversion."""
@@ -194,9 +187,7 @@ class TestWeatherPlugin:
 
     @pytest.mark.asyncio
     @respx.mock
-    async def test_timeout_error(
-        self, context_with_gps: NodeContext
-    ) -> None:
+    async def test_timeout_error(self, context_with_gps: NodeContext) -> None:
         """Test handling of timeout."""
         import httpx
 

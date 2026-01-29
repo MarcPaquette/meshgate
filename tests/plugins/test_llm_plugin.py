@@ -43,9 +43,7 @@ class TestLLMPlugin:
         assert "!exit" in help_text
 
     @pytest.mark.asyncio
-    async def test_clear_command(
-        self, plugin: LLMPlugin, context: NodeContext
-    ) -> None:
+    async def test_clear_command(self, plugin: LLMPlugin, context: NodeContext) -> None:
         """Test !clear clears history."""
         state = {"model": "test-model", "history": [{"role": "user", "content": "hi"}]}
         response = await plugin.handle("!clear", context, state)
@@ -92,9 +90,7 @@ class TestLLMPlugin:
 
     @pytest.mark.asyncio
     @respx.mock
-    async def test_switch_model_not_found(
-        self, plugin: LLMPlugin, context: NodeContext
-    ) -> None:
+    async def test_switch_model_not_found(self, plugin: LLMPlugin, context: NodeContext) -> None:
         """Test switching to non-existent model."""
         respx.get("http://localhost:11434/api/tags").mock(
             return_value=Response(
@@ -109,9 +105,7 @@ class TestLLMPlugin:
 
     @pytest.mark.asyncio
     @respx.mock
-    async def test_prompt_response(
-        self, plugin: LLMPlugin, context: NodeContext
-    ) -> None:
+    async def test_prompt_response(self, plugin: LLMPlugin, context: NodeContext) -> None:
         """Test sending a prompt and receiving response."""
         respx.post("http://localhost:11434/api/chat").mock(
             return_value=Response(
@@ -125,18 +119,14 @@ class TestLLMPlugin:
             )
         )
 
-        response = await plugin.handle(
-            "Hello", context, {"model": "test-model", "history": []}
-        )
+        response = await plugin.handle("Hello", context, {"model": "test-model", "history": []})
 
         assert "Test response from LLM" in response.message
         assert len(response.plugin_state["history"]) == 2
 
     @pytest.mark.asyncio
     @respx.mock
-    async def test_response_truncation(
-        self, plugin: LLMPlugin, context: NodeContext
-    ) -> None:
+    async def test_response_truncation(self, plugin: LLMPlugin, context: NodeContext) -> None:
         """Test that long responses are truncated."""
         long_response = "x" * 500
         respx.post("http://localhost:11434/api/chat").mock(
@@ -151,35 +141,27 @@ class TestLLMPlugin:
             )
         )
 
-        response = await plugin.handle(
-            "Hello", context, {"model": "test-model", "history": []}
-        )
+        response = await plugin.handle("Hello", context, {"model": "test-model", "history": []})
 
         assert len(response.message) <= 400
         assert response.message.endswith("...")
 
     @pytest.mark.asyncio
     @respx.mock
-    async def test_connection_error(
-        self, plugin: LLMPlugin, context: NodeContext
-    ) -> None:
+    async def test_connection_error(self, plugin: LLMPlugin, context: NodeContext) -> None:
         """Test handling connection error."""
         respx.post("http://localhost:11434/api/chat").mock(
             side_effect=Exception("Connection refused")
         )
 
-        response = await plugin.handle(
-            "Hello", context, {"model": "test-model", "history": []}
-        )
+        response = await plugin.handle("Hello", context, {"model": "test-model", "history": []})
 
         # Should return error message, not crash
         assert "error" in response.message.lower() or "connect" in response.message.lower()
 
     @pytest.mark.asyncio
     @respx.mock
-    async def test_history_limited(
-        self, plugin: LLMPlugin, context: NodeContext
-    ) -> None:
+    async def test_history_limited(self, plugin: LLMPlugin, context: NodeContext) -> None:
         """Test that history is limited in size."""
         respx.post("http://localhost:11434/api/chat").mock(
             return_value=Response(

@@ -77,9 +77,7 @@ class TestWikipediaPlugin:
                 json=["specific term", ["Specific Article"], [], []],
             )
         )
-        respx.get(
-            "https://en.wikipedia.org/api/rest_v1/page/summary/Specific_Article"
-        ).mock(
+        respx.get("https://en.wikipedia.org/api/rest_v1/page/summary/Specific_Article").mock(
             return_value=Response(
                 200,
                 json={
@@ -96,9 +94,7 @@ class TestWikipediaPlugin:
 
     @pytest.mark.asyncio
     @respx.mock
-    async def test_search_no_results(
-        self, plugin: WikipediaPlugin, context: NodeContext
-    ) -> None:
+    async def test_search_no_results(self, plugin: WikipediaPlugin, context: NodeContext) -> None:
         """Test search with no results."""
         respx.get("https://en.wikipedia.org/w/api.php").mock(
             return_value=Response(200, json=["query", [], [], []])
@@ -110,16 +106,12 @@ class TestWikipediaPlugin:
 
     @pytest.mark.asyncio
     @respx.mock
-    async def test_search_command(
-        self, plugin: WikipediaPlugin, context: NodeContext
-    ) -> None:
+    async def test_search_command(self, plugin: WikipediaPlugin, context: NodeContext) -> None:
         """Test !search command."""
         respx.get("https://en.wikipedia.org/w/api.php").mock(
             return_value=Response(200, json=["test", ["Test Article"], [], []])
         )
-        respx.get(
-            "https://en.wikipedia.org/api/rest_v1/page/summary/Test_Article"
-        ).mock(
+        respx.get("https://en.wikipedia.org/api/rest_v1/page/summary/Test_Article").mock(
             return_value=Response(
                 200,
                 json={"title": "Test Article", "extract": "Test content"},
@@ -132,9 +124,7 @@ class TestWikipediaPlugin:
 
     @pytest.mark.asyncio
     @respx.mock
-    async def test_random_article(
-        self, plugin: WikipediaPlugin, context: NodeContext
-    ) -> None:
+    async def test_random_article(self, plugin: WikipediaPlugin, context: NodeContext) -> None:
         """Test !random command."""
         respx.get("https://en.wikipedia.org/api/rest_v1/page/random/summary").mock(
             return_value=Response(
@@ -153,13 +143,9 @@ class TestWikipediaPlugin:
 
     @pytest.mark.asyncio
     @respx.mock
-    async def test_select_from_results(
-        self, plugin: WikipediaPlugin, context: NodeContext
-    ) -> None:
+    async def test_select_from_results(self, plugin: WikipediaPlugin, context: NodeContext) -> None:
         """Test selecting numbered result."""
-        respx.get(
-            "https://en.wikipedia.org/api/rest_v1/page/summary/Second_Article"
-        ).mock(
+        respx.get("https://en.wikipedia.org/api/rest_v1/page/summary/Second_Article").mock(
             return_value=Response(
                 200,
                 json={
@@ -176,9 +162,7 @@ class TestWikipediaPlugin:
 
     @pytest.mark.asyncio
     @respx.mock
-    async def test_summary_truncation(
-        self, plugin: WikipediaPlugin, context: NodeContext
-    ) -> None:
+    async def test_summary_truncation(self, plugin: WikipediaPlugin, context: NodeContext) -> None:
         """Test that long summaries are truncated."""
         long_text = "x" * 500
         respx.get("https://en.wikipedia.org/api/rest_v1/page/random/summary").mock(
@@ -195,9 +179,7 @@ class TestWikipediaPlugin:
 
     @pytest.mark.asyncio
     @respx.mock
-    async def test_connection_error(
-        self, plugin: WikipediaPlugin, context: NodeContext
-    ) -> None:
+    async def test_connection_error(self, plugin: WikipediaPlugin, context: NodeContext) -> None:
         """Test handling connection error."""
         respx.get("https://en.wikipedia.org/w/api.php").mock(
             side_effect=Exception("Connection refused")
@@ -206,15 +188,10 @@ class TestWikipediaPlugin:
         response = await plugin.handle("test", context, {})
 
         # Should return error message, not crash
-        assert (
-            "error" in response.message.lower()
-            or "connect" in response.message.lower()
-        )
+        assert "error" in response.message.lower() or "connect" in response.message.lower()
 
     @pytest.mark.asyncio
-    async def test_empty_search_query(
-        self, plugin: WikipediaPlugin, context: NodeContext
-    ) -> None:
+    async def test_empty_search_query(self, plugin: WikipediaPlugin, context: NodeContext) -> None:
         """Test empty search query."""
         response = await plugin.handle("!search ", context, {})
 
@@ -231,9 +208,7 @@ class TestWikipediaPlugin:
 
     @pytest.mark.asyncio
     @respx.mock
-    async def test_http_500_error(
-        self, plugin: WikipediaPlugin, context: NodeContext
-    ) -> None:
+    async def test_http_500_error(self, plugin: WikipediaPlugin, context: NodeContext) -> None:
         """Test handling of HTTP 500 server error."""
         respx.get("https://en.wikipedia.org/w/api.php").mock(
             return_value=Response(500, text="Internal Server Error")

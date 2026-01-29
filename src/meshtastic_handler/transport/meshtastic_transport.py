@@ -62,9 +62,7 @@ class MeshtasticTransport(MessageTransport):
 
         try:
             if self._connection_type == "serial":
-                self._interface = meshtastic.serial_interface.SerialInterface(
-                    devPath=self._device
-                )
+                self._interface = meshtastic.serial_interface.SerialInterface(devPath=self._device)
             elif self._connection_type == "tcp":
                 if not self._tcp_host:
                     raise ValueError("tcp_host is required for TCP connections")
@@ -74,13 +72,9 @@ class MeshtasticTransport(MessageTransport):
             elif self._connection_type == "ble":
                 import meshtastic.ble_interface
 
-                self._interface = meshtastic.ble_interface.BLEInterface(
-                    address=self._device
-                )
+                self._interface = meshtastic.ble_interface.BLEInterface(address=self._device)
             else:
-                raise ValueError(
-                    f"Unsupported connection type: {self._connection_type}"
-                )
+                raise ValueError(f"Unsupported connection type: {self._connection_type}")
 
             # Subscribe to received messages
             from pubsub import pub
@@ -88,9 +82,7 @@ class MeshtasticTransport(MessageTransport):
             pub.subscribe(self._on_receive, "meshtastic.receive.text")
 
             self._connected = True
-            logger.info(
-                f"Connected to Meshtastic device via {self._connection_type}"
-            )
+            logger.info(f"Connected to Meshtastic device via {self._connection_type}")
 
         except Exception as e:
             self._connected = False
@@ -130,9 +122,7 @@ class MeshtasticTransport(MessageTransport):
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(
                 None,
-                lambda: self._interface.sendText(
-                    text=message, destinationId=node_id, wantAck=True
-                ),
+                lambda: self._interface.sendText(text=message, destinationId=node_id, wantAck=True),
             )
             logger.debug(f"Sent message to {node_id}: {message[:50]}...")
             return True
@@ -157,9 +147,7 @@ class MeshtasticTransport(MessageTransport):
         while self._connected:
             try:
                 # Wait for message with timeout to allow checking connection status
-                message = await asyncio.wait_for(
-                    self._message_queue.get(), timeout=1.0
-                )
+                message = await asyncio.wait_for(self._message_queue.get(), timeout=1.0)
                 yield message
             except TimeoutError:
                 continue
@@ -196,13 +184,9 @@ class MeshtasticTransport(MessageTransport):
                 alt = position.get("altitude")
 
                 if lat is not None and lon is not None:
-                    location = GPSLocation(
-                        latitude=lat, longitude=lon, altitude=alt
-                    )
+                    location = GPSLocation(latitude=lat, longitude=lon, altitude=alt)
 
-            context = NodeContext(
-                node_id=from_id, node_name=node_name, location=location
-            )
+            context = NodeContext(node_id=from_id, node_name=node_name, location=location)
             incoming = IncomingMessage(text=text, context=context)
 
             # Add to queue for async processing

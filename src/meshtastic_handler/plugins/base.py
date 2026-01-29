@@ -125,9 +125,7 @@ class HTTPPluginBase(Plugin, ABC):
         """
         try:
             async with self._create_client() as client:
-                response = await self._safe_request(
-                    client.get, url, params=params, headers=headers
-                )
+                response = await self._safe_request(client.get, url, params=params, headers=headers)
                 if isinstance(response, PluginResponse):
                     return response
                 return response.json()

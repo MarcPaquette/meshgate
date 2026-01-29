@@ -78,11 +78,7 @@ class WeatherPlugin(HTTPPluginBase):
 
     def get_welcome_message(self) -> str:
         """Message shown when user enters this plugin."""
-        return (
-            "Weather Service\n"
-            "Getting current weather...\n"
-            "Send !help for commands"
-        )
+        return "Weather Service\nGetting current weather...\nSend !help for commands"
 
     def get_help_text(self) -> str:
         """Help text showing plugin-specific commands."""
@@ -120,9 +116,7 @@ class WeatherPlugin(HTTPPluginBase):
         # Treat any other message as a refresh request
         return await self._handle_current_weather(lat, lon)
 
-    async def _handle_current_weather(
-        self, lat: float, lon: float
-    ) -> PluginResponse:
+    async def _handle_current_weather(self, lat: float, lon: float) -> PluginResponse:
         """Fetch and display current weather."""
         result = await self._fetch_json(
             self.OPEN_METEO_URL,

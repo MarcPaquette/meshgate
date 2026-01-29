@@ -72,13 +72,19 @@ class TestParseArgs:
 
     def test_multiple_args(self) -> None:
         """Test multiple arguments together."""
-        args = parse_args([
-            "-c", "config.yaml",
-            "-v",
-            "--connection", "tcp",
-            "--tcp-host", "192.168.1.1",
-            "--tcp-port", "5000",
-        ])
+        args = parse_args(
+            [
+                "-c",
+                "config.yaml",
+                "-v",
+                "--connection",
+                "tcp",
+                "--tcp-host",
+                "192.168.1.1",
+                "--tcp-port",
+                "5000",
+            ]
+        )
 
         assert args.config == "config.yaml"
         assert args.verbose is True
@@ -100,9 +106,7 @@ class TestLoadConfig:
 
     def test_load_config_from_file(self) -> None:
         """Test loading config from YAML file."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write("""
 server:
   max_message_size: 100
@@ -134,9 +138,7 @@ meshtastic:
 
     def test_cli_overrides_connection(self) -> None:
         """Test CLI overrides config connection type."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write("""
 meshtastic:
   connection_type: serial
@@ -154,9 +156,7 @@ meshtastic:
 
     def test_cli_overrides_device(self) -> None:
         """Test CLI overrides config device."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write("""
 meshtastic:
   device: /dev/ttyACM0
@@ -187,12 +187,18 @@ meshtastic:
 
     def test_all_overrides_together(self) -> None:
         """Test all CLI overrides applied together."""
-        args = parse_args([
-            "--connection", "tcp",
-            "--device", "/dev/custom",
-            "--tcp-host", "host.local",
-            "--tcp-port", "1234",
-        ])
+        args = parse_args(
+            [
+                "--connection",
+                "tcp",
+                "--device",
+                "/dev/custom",
+                "--tcp-host",
+                "host.local",
+                "--tcp-port",
+                "1234",
+            ]
+        )
         config = load_config(args)
 
         assert config.meshtastic.connection_type == "tcp"

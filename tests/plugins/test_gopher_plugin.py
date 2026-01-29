@@ -54,9 +54,7 @@ class TestGopherPlugin:
         assert "!exit" in help_text
 
     @pytest.mark.asyncio
-    async def test_list_root_directory(
-        self, plugin: GopherPlugin, context: NodeContext
-    ) -> None:
+    async def test_list_root_directory(self, plugin: GopherPlugin, context: NodeContext) -> None:
         """Test listing root directory."""
         response = await plugin.handle("!home", context, {})
 
@@ -114,9 +112,7 @@ class TestGopherPlugin:
     ) -> None:
         """Test !back navigates to parent directory."""
         subfolder = temp_gopher_dir / "folder1"
-        response = await plugin.handle(
-            "!back", context, {"current_path": str(subfolder)}
-        )
+        response = await plugin.handle("!back", context, {"current_path": str(subfolder)})
 
         assert "[/]" in response.message
 
@@ -125,9 +121,7 @@ class TestGopherPlugin:
         self, plugin: GopherPlugin, context: NodeContext, temp_gopher_dir: Path
     ) -> None:
         """Test !back at root stays at root."""
-        response = await plugin.handle(
-            "!back", context, {"current_path": str(temp_gopher_dir)}
-        )
+        response = await plugin.handle("!back", context, {"current_path": str(temp_gopher_dir)})
 
         assert "Already at root" in response.message
 
@@ -137,9 +131,7 @@ class TestGopherPlugin:
     ) -> None:
         """Test !home returns to root."""
         subfolder = temp_gopher_dir / "folder1"
-        response = await plugin.handle(
-            "!home", context, {"current_path": str(subfolder)}
-        )
+        response = await plugin.handle("!home", context, {"current_path": str(subfolder)})
 
         assert "[/]" in response.message
 
@@ -148,9 +140,7 @@ class TestGopherPlugin:
         self, plugin: GopherPlugin, context: NodeContext, temp_gopher_dir: Path
     ) -> None:
         """Test invalid number selection."""
-        response = await plugin.handle(
-            "99", context, {"current_path": str(temp_gopher_dir)}
-        )
+        response = await plugin.handle("99", context, {"current_path": str(temp_gopher_dir)})
 
         assert "Invalid selection" in response.message
 
@@ -166,9 +156,7 @@ class TestGopherPlugin:
         assert "Invalid input" in response.message
 
     @pytest.mark.asyncio
-    async def test_empty_directory(
-        self, plugin: GopherPlugin, context: NodeContext
-    ) -> None:
+    async def test_empty_directory(self, plugin: GopherPlugin, context: NodeContext) -> None:
         """Test listing empty directory."""
         with tempfile.TemporaryDirectory() as tmpdir:
             empty_plugin = GopherPlugin(root_directory=tmpdir)

@@ -66,36 +66,26 @@ class TestHTTPPluginBase:
 
     @pytest.mark.asyncio
     @respx.mock
-    async def test_safe_request_success(
-        self, plugin: ConcreteHTTPPlugin
-    ) -> None:
+    async def test_safe_request_success(self, plugin: ConcreteHTTPPlugin) -> None:
         """Test _safe_request with successful response."""
-        respx.get("https://example.com/api").mock(
-            return_value=Response(200, json={"key": "value"})
-        )
+        respx.get("https://example.com/api").mock(return_value=Response(200, json={"key": "value"}))
 
         async with plugin._create_client() as client:
-            result = await plugin._safe_request(
-                client.get, "https://example.com/api"
-            )
+            result = await plugin._safe_request(client.get, "https://example.com/api")
 
         assert isinstance(result, httpx.Response)
         assert result.json() == {"key": "value"}
 
     @pytest.mark.asyncio
     @respx.mock
-    async def test_safe_request_connect_error(
-        self, plugin: ConcreteHTTPPlugin
-    ) -> None:
+    async def test_safe_request_connect_error(self, plugin: ConcreteHTTPPlugin) -> None:
         """Test _safe_request with connection error."""
         respx.get("https://example.com/api").mock(
             side_effect=httpx.ConnectError("Connection refused")
         )
 
         async with plugin._create_client() as client:
-            result = await plugin._safe_request(
-                client.get, "https://example.com/api"
-            )
+            result = await plugin._safe_request(client.get, "https://example.com/api")
 
         assert isinstance(result, PluginResponse)
         assert "Cannot connect" in result.message
@@ -103,49 +93,33 @@ class TestHTTPPluginBase:
 
     @pytest.mark.asyncio
     @respx.mock
-    async def test_safe_request_timeout(
-        self, plugin: ConcreteHTTPPlugin
-    ) -> None:
+    async def test_safe_request_timeout(self, plugin: ConcreteHTTPPlugin) -> None:
         """Test _safe_request with timeout."""
-        respx.get("https://example.com/api").mock(
-            side_effect=httpx.TimeoutException("Timeout")
-        )
+        respx.get("https://example.com/api").mock(side_effect=httpx.TimeoutException("Timeout"))
 
         async with plugin._create_client() as client:
-            result = await plugin._safe_request(
-                client.get, "https://example.com/api"
-            )
+            result = await plugin._safe_request(client.get, "https://example.com/api")
 
         assert isinstance(result, PluginResponse)
         assert "timed out" in result.message
 
     @pytest.mark.asyncio
     @respx.mock
-    async def test_safe_request_http_error(
-        self, plugin: ConcreteHTTPPlugin
-    ) -> None:
+    async def test_safe_request_http_error(self, plugin: ConcreteHTTPPlugin) -> None:
         """Test _safe_request with HTTP error status."""
-        respx.get("https://example.com/api").mock(
-            return_value=Response(500, text="Server Error")
-        )
+        respx.get("https://example.com/api").mock(return_value=Response(500, text="Server Error"))
 
         async with plugin._create_client() as client:
-            result = await plugin._safe_request(
-                client.get, "https://example.com/api"
-            )
+            result = await plugin._safe_request(client.get, "https://example.com/api")
 
         assert isinstance(result, PluginResponse)
         assert "500" in result.message
 
     @pytest.mark.asyncio
     @respx.mock
-    async def test_fetch_json_success(
-        self, plugin: ConcreteHTTPPlugin
-    ) -> None:
+    async def test_fetch_json_success(self, plugin: ConcreteHTTPPlugin) -> None:
         """Test _fetch_json with successful response."""
-        respx.get("https://example.com/api").mock(
-            return_value=Response(200, json={"data": "test"})
-        )
+        respx.get("https://example.com/api").mock(return_value=Response(200, json={"data": "test"}))
 
         result = await plugin._fetch_json("https://example.com/api")
 
@@ -154,30 +128,20 @@ class TestHTTPPluginBase:
 
     @pytest.mark.asyncio
     @respx.mock
-    async def test_fetch_json_with_params(
-        self, plugin: ConcreteHTTPPlugin
-    ) -> None:
+    async def test_fetch_json_with_params(self, plugin: ConcreteHTTPPlugin) -> None:
         """Test _fetch_json with query parameters."""
-        respx.get("https://example.com/api").mock(
-            return_value=Response(200, json={"result": "ok"})
-        )
+        respx.get("https://example.com/api").mock(return_value=Response(200, json={"result": "ok"}))
 
-        result = await plugin._fetch_json(
-            "https://example.com/api", params={"key": "value"}
-        )
+        result = await plugin._fetch_json("https://example.com/api", params={"key": "value"})
 
         assert isinstance(result, dict)
         assert result["result"] == "ok"
 
     @pytest.mark.asyncio
     @respx.mock
-    async def test_fetch_json_error(
-        self, plugin: ConcreteHTTPPlugin
-    ) -> None:
+    async def test_fetch_json_error(self, plugin: ConcreteHTTPPlugin) -> None:
         """Test _fetch_json with error response."""
-        respx.get("https://example.com/api").mock(
-            side_effect=httpx.ConnectError("Failed")
-        )
+        respx.get("https://example.com/api").mock(side_effect=httpx.ConnectError("Failed"))
 
         result = await plugin._fetch_json("https://example.com/api")
 
@@ -186,34 +150,24 @@ class TestHTTPPluginBase:
 
     @pytest.mark.asyncio
     @respx.mock
-    async def test_post_json_success(
-        self, plugin: ConcreteHTTPPlugin
-    ) -> None:
+    async def test_post_json_success(self, plugin: ConcreteHTTPPlugin) -> None:
         """Test _post_json with successful response."""
         respx.post("https://example.com/api").mock(
             return_value=Response(200, json={"created": True})
         )
 
-        result = await plugin._post_json(
-            "https://example.com/api", json_data={"name": "test"}
-        )
+        result = await plugin._post_json("https://example.com/api", json_data={"name": "test"})
 
         assert isinstance(result, dict)
         assert result["created"] is True
 
     @pytest.mark.asyncio
     @respx.mock
-    async def test_post_json_error(
-        self, plugin: ConcreteHTTPPlugin
-    ) -> None:
+    async def test_post_json_error(self, plugin: ConcreteHTTPPlugin) -> None:
         """Test _post_json with error."""
-        respx.post("https://example.com/api").mock(
-            return_value=Response(400, text="Bad Request")
-        )
+        respx.post("https://example.com/api").mock(return_value=Response(400, text="Bad Request"))
 
-        result = await plugin._post_json(
-            "https://example.com/api", json_data={"invalid": "data"}
-        )
+        result = await plugin._post_json("https://example.com/api", json_data={"invalid": "data"})
 
         assert isinstance(result, PluginResponse)
         assert "400" in result.message
@@ -225,13 +179,9 @@ class TestHTTPPluginBase:
         assert response.message == "Something went wrong"
         assert response.plugin_state is None
 
-    def test_error_response_with_state(
-        self, plugin: ConcreteHTTPPlugin
-    ) -> None:
+    def test_error_response_with_state(self, plugin: ConcreteHTTPPlugin) -> None:
         """Test _error_response with preserved state."""
-        response = plugin._error_response(
-            "Error", plugin_state={"key": "value"}
-        )
+        response = plugin._error_response("Error", plugin_state={"key": "value"})
 
         assert response.message == "Error"
         assert response.plugin_state == {"key": "value"}
@@ -244,9 +194,7 @@ class TestHTTPPluginBase:
         assert response.plugin_state is None
         assert response.exit_plugin is False
 
-    def test_success_response_with_exit(
-        self, plugin: ConcreteHTTPPlugin
-    ) -> None:
+    def test_success_response_with_exit(self, plugin: ConcreteHTTPPlugin) -> None:
         """Test _success_response with exit flag."""
         response = plugin._success_response(
             "Done",
