@@ -4,8 +4,8 @@ import pytest
 import respx
 from httpx import Response
 
-from meshtastic_handler.interfaces.node_context import GPSLocation, NodeContext
-from meshtastic_handler.plugins.weather_plugin import WeatherPlugin
+from meshgate.interfaces.node_context import GPSLocation, NodeContext
+from meshgate.plugins.weather_plugin import WeatherPlugin
 
 
 class TestWeatherPlugin:

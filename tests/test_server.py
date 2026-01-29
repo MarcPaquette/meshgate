@@ -4,8 +4,8 @@ import asyncio
 
 import pytest
 
-from meshtastic_handler.config import Config
-from meshtastic_handler.server import HandlerServer
+from meshgate.config import Config
+from meshgate.server import HandlerServer
 from tests.mocks import MockTransport
 
 

@@ -4,12 +4,12 @@ import asyncio
 import logging
 from collections.abc import AsyncIterator
 
-from meshtastic_handler.interfaces.message_transport import (
+from meshgate.interfaces.message_transport import (
     IncomingMessage,
     MessageHandler,
     MessageTransport,
 )
-from meshtastic_handler.interfaces.node_context import GPSLocation, NodeContext
+from meshgate.interfaces.node_context import GPSLocation, NodeContext
 
 logger = logging.getLogger(__name__)
 

@@ -3,17 +3,17 @@
 import asyncio
 import logging
 
-from meshtastic_handler.config import Config
-from meshtastic_handler.core.content_chunker import ContentChunker
-from meshtastic_handler.core.message_router import MessageRouter
-from meshtastic_handler.core.plugin_registry import PluginRegistry
-from meshtastic_handler.core.session_manager import SessionManager
-from meshtastic_handler.interfaces.message_transport import IncomingMessage, MessageTransport
-from meshtastic_handler.plugins.gopher_plugin import GopherPlugin
-from meshtastic_handler.plugins.llm_plugin import LLMPlugin
-from meshtastic_handler.plugins.weather_plugin import WeatherPlugin
-from meshtastic_handler.plugins.wikipedia_plugin import WikipediaPlugin
-from meshtastic_handler.transport.meshtastic_transport import MeshtasticTransport
+from meshgate.config import Config
+from meshgate.core.content_chunker import ContentChunker
+from meshgate.core.message_router import MessageRouter
+from meshgate.core.plugin_registry import PluginRegistry
+from meshgate.core.session_manager import SessionManager
+from meshgate.interfaces.message_transport import IncomingMessage, MessageTransport
+from meshgate.plugins.gopher_plugin import GopherPlugin
+from meshgate.plugins.llm_plugin import LLMPlugin
+from meshgate.plugins.weather_plugin import WeatherPlugin
+from meshgate.plugins.wikipedia_plugin import WikipediaPlugin
+from meshgate.transport.meshtastic_transport import MeshtasticTransport
 
 logger = logging.getLogger(__name__)
 
@@ -206,7 +206,7 @@ class HandlerServer:
         Returns:
             Response text
         """
-        from meshtastic_handler.interfaces.node_context import NodeContext
+        from meshgate.interfaces.node_context import NodeContext
 
         context = NodeContext(node_id=node_id, node_name=node_name)
         session = self._session_manager.get_session(node_id)

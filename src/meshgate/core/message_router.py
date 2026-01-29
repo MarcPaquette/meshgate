@@ -3,10 +3,10 @@
 from dataclasses import dataclass
 from typing import Any
 
-from meshtastic_handler.core.plugin_registry import PluginRegistry
-from meshtastic_handler.core.session import Session
-from meshtastic_handler.interfaces.node_context import NodeContext
-from meshtastic_handler.interfaces.plugin import PluginResponse
+from meshgate.core.plugin_registry import PluginRegistry
+from meshgate.core.session import Session
+from meshgate.interfaces.node_context import NodeContext
+from meshgate.interfaces.plugin import PluginResponse
 
 
 @dataclass(frozen=True)

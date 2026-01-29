@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from meshtastic_handler.core.plugin_loader import PluginLoader, PluginLoadError
+from meshgate.core.plugin_loader import PluginLoader, PluginLoadError
 
 
 class TestPluginLoader:
@@ -18,7 +18,7 @@ class TestPluginLoader:
 
     def test_load_builtin_plugin(self, loader: PluginLoader) -> None:
         """Test loading a built-in plugin by module path."""
-        plugin = loader.load_plugin("meshtastic_handler.plugins.weather_plugin")
+        plugin = loader.load_plugin("meshgate.plugins.weather_plugin")
         assert plugin.metadata.name == "Weather"
 
     def test_load_nonexistent_module(self, loader: PluginLoader) -> None:
@@ -30,8 +30,8 @@ class TestPluginLoader:
         """Test loading plugin from a Python file."""
         plugin_code = """
 from typing import Any
-from meshtastic_handler.interfaces.plugin import Plugin, PluginMetadata, PluginResponse
-from meshtastic_handler.interfaces.node_context import NodeContext
+from meshgate.interfaces.plugin import Plugin, PluginMetadata, PluginResponse
+from meshgate.interfaces.node_context import NodeContext
 
 class TestFilePlugin(Plugin):
     @property
@@ -108,8 +108,8 @@ class TestFilePlugin(Plugin):
         """Test that files starting with underscore are skipped."""
         plugin_code = """
 from typing import Any
-from meshtastic_handler.interfaces.plugin import Plugin, PluginMetadata, PluginResponse
-from meshtastic_handler.interfaces.node_context import NodeContext
+from meshgate.interfaces.plugin import Plugin, PluginMetadata, PluginResponse
+from meshgate.interfaces.node_context import NodeContext
 
 class PrivatePlugin(Plugin):
     @property

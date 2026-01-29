@@ -2,7 +2,7 @@
 
 import pytest
 
-from meshtastic_handler.core.plugin_registry import PluginRegistry
+from meshgate.core.plugin_registry import PluginRegistry
 from tests.mocks import MockPlugin
 
 

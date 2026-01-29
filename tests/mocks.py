@@ -4,13 +4,13 @@ import asyncio
 from collections.abc import AsyncIterator
 from typing import Any
 
-from meshtastic_handler.interfaces.message_transport import (
+from meshgate.interfaces.message_transport import (
     IncomingMessage,
     MessageHandler,
     MessageTransport,
 )
-from meshtastic_handler.interfaces.node_context import NodeContext
-from meshtastic_handler.interfaces.plugin import Plugin, PluginMetadata, PluginResponse
+from meshgate.interfaces.node_context import NodeContext
+from meshgate.interfaces.plugin import Plugin, PluginMetadata, PluginResponse
 
 
 class MockTransport(MessageTransport):

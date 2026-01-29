@@ -3,8 +3,8 @@
 from pathlib import Path
 from typing import Any
 
-from meshtastic_handler.interfaces.node_context import NodeContext
-from meshtastic_handler.interfaces.plugin import Plugin, PluginMetadata, PluginResponse
+from meshgate.interfaces.node_context import NodeContext
+from meshgate.interfaces.plugin import Plugin, PluginMetadata, PluginResponse
 
 
 class GopherPlugin(Plugin):

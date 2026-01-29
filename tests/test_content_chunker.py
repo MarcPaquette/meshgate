@@ -2,7 +2,7 @@
 
 import pytest
 
-from meshtastic_handler.core.content_chunker import ContentChunker
+from meshgate.core.content_chunker import ContentChunker
 
 
 class TestContentChunker:

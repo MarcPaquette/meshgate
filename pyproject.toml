@@ -1,14 +1,14 @@
 [project]
-name = "meshtastic-handler-server"
+name = "meshgate"
 version = "0.1.0"
-description = "A Python-based Meshtastic server with a plugin architecture for handling different types of requests"
+description = "A gateway server for Meshtastic mesh networks with a plugin architecture"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 authors = [
-    { name = "Meshtastic Handler Team" }
+    { name = "Meshgate Team" }
 ]
-keywords = ["meshtastic", "lora", "mesh", "radio", "plugin"]
+keywords = ["meshtastic", "lora", "mesh", "radio", "plugin", "gateway"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -33,14 +33,14 @@ dev = [
 ]
 
 [project.scripts]
-meshtastic-handler = "meshtastic_handler.cli:main"
+meshgate = "meshgate.cli:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/meshtastic_handler"]
+packages = ["src/meshgate"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

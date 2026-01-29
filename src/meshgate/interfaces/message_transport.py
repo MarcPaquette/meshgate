@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Callable, Coroutine
 from dataclasses import dataclass
 
-from meshtastic_handler.interfaces.node_context import NodeContext
+from meshgate.interfaces.node_context import NodeContext
 
 
 @dataclass(frozen=True)

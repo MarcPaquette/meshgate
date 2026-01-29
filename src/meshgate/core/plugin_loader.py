@@ -6,7 +6,7 @@ import inspect
 import logging
 from pathlib import Path
 
-from meshtastic_handler.interfaces.plugin import Plugin
+from meshgate.interfaces.plugin import Plugin
 
 logger = logging.getLogger(__name__)
 

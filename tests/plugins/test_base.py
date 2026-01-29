@@ -7,9 +7,9 @@ import pytest
 import respx
 from httpx import Response
 
-from meshtastic_handler.interfaces.node_context import NodeContext
-from meshtastic_handler.interfaces.plugin import PluginMetadata, PluginResponse
-from meshtastic_handler.plugins.base import HTTPPluginBase
+from meshgate.interfaces.node_context import NodeContext
+from meshgate.interfaces.plugin import PluginMetadata, PluginResponse
+from meshgate.plugins.base import HTTPPluginBase
 
 
 class ConcreteHTTPPlugin(HTTPPluginBase):

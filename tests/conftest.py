@@ -2,11 +2,11 @@
 
 import pytest
 
-from meshtastic_handler.config import Config
-from meshtastic_handler.core.plugin_registry import PluginRegistry
-from meshtastic_handler.core.session import Session
-from meshtastic_handler.core.session_manager import SessionManager
-from meshtastic_handler.interfaces.node_context import GPSLocation, NodeContext
+from meshgate.config import Config
+from meshgate.core.plugin_registry import PluginRegistry
+from meshgate.core.session import Session
+from meshgate.core.session_manager import SessionManager
+from meshgate.interfaces.node_context import GPSLocation, NodeContext
 from tests.mocks import MockPlugin, MockTransport
 
 

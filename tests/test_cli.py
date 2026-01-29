@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from meshtastic_handler.cli import load_config, parse_args
-from meshtastic_handler.config import Config
+from meshgate.cli import load_config, parse_args
+from meshgate.config import Config
 
 
 class TestParseArgs:

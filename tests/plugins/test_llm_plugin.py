@@ -4,8 +4,8 @@ import pytest
 import respx
 from httpx import Response
 
-from meshtastic_handler.interfaces.node_context import NodeContext
-from meshtastic_handler.plugins.llm_plugin import LLMPlugin
+from meshgate.interfaces.node_context import NodeContext
+from meshgate.plugins.llm_plugin import LLMPlugin
 
 
 class TestLLMPlugin:

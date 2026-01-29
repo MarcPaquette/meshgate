@@ -7,7 +7,7 @@ from typing import Any, TypeVar
 
 import httpx
 
-from meshtastic_handler.interfaces.plugin import Plugin, PluginResponse
+from meshgate.interfaces.plugin import Plugin, PluginResponse
 
 logger = logging.getLogger(__name__)
 

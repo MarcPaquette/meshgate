@@ -6,8 +6,8 @@ import logging
 import sys
 from pathlib import Path
 
-from meshtastic_handler.config import Config
-from meshtastic_handler.server import HandlerServer
+from meshgate.config import Config
+from meshgate.server import HandlerServer
 
 
 def setup_logging(verbose: bool = False) -> None:

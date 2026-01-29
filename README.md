@@ -1,6 +1,6 @@
-# Meshtastic Handler Server
+# Meshgate
 
-A Python-based Meshtastic server with a plugin architecture for handling different types of requests. Provides an interactive menu system for users to access various services over the Meshtastic mesh network.
+A gateway server for Meshtastic mesh networks with a plugin architecture. Provides an interactive menu system for users to access various services over the mesh.
 
 ## Features
 
@@ -20,8 +20,8 @@ Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/) package manager.
 
 ```bash
 # Clone the repository
-git clone <repository-url>
-cd meshtastic-handler-server
+git clone https://github.com/MarcPaquette/meshgate.git
+cd meshgate
 
 # Install dependencies
 uv sync
@@ -34,16 +34,16 @@ uv sync --extra dev
 
 ```bash
 # Run with auto-detect serial device
-uv run python -m meshtastic_handler
+uv run python -m meshgate
 
 # Run with specific serial device
-uv run python -m meshtastic_handler --device /dev/ttyUSB0
+uv run python -m meshgate --device /dev/ttyUSB0
 
 # Run with TCP connection
-uv run python -m meshtastic_handler --connection tcp --tcp-host 192.168.1.100
+uv run python -m meshgate --connection tcp --tcp-host 192.168.1.100
 
 # Run with config file
-uv run python -m meshtastic_handler --config config.yaml
+uv run python -m meshgate --config config.yaml
 ```
 
 ## User Interaction Flow
@@ -158,8 +158,8 @@ uv run pytest tests/ -v
 ### Project Structure
 
 ```
-meshtastic-handler-server/
-├── src/meshtastic_handler/
+meshgate/
+├── src/meshgate/
 │   ├── interfaces/          # Abstract base classes (Plugin, MessageTransport)
 │   ├── core/                # Plugin registry, routing, sessions, plugin loader
 │   ├── transport/           # Meshtastic transport implementation
@@ -173,8 +173,8 @@ meshtastic-handler-server/
 #### Basic Plugin
 
 ```python
-from meshtastic_handler.interfaces.plugin import Plugin, PluginMetadata, PluginResponse
-from meshtastic_handler.interfaces.node_context import NodeContext
+from meshgate.interfaces.plugin import Plugin, PluginMetadata, PluginResponse
+from meshgate.interfaces.node_context import NodeContext
 
 class MyPlugin(Plugin):
     @property
@@ -220,9 +220,9 @@ async def handle(self, message: str, context: NodeContext, plugin_state: dict) -
 For plugins that make HTTP requests, inherit from `HTTPPluginBase` for built-in error handling:
 
 ```python
-from meshtastic_handler.plugins.base import HTTPPluginBase
-from meshtastic_handler.interfaces.plugin import PluginMetadata, PluginResponse
-from meshtastic_handler.interfaces.node_context import NodeContext
+from meshgate.plugins.base import HTTPPluginBase
+from meshgate.interfaces.plugin import PluginMetadata, PluginResponse
+from meshgate.interfaces.node_context import NodeContext
 
 class MyAPIPlugin(HTTPPluginBase):
     def __init__(self):
@@ -255,7 +255,7 @@ class MyAPIPlugin(HTTPPluginBase):
 Load plugins dynamically from modules or files:
 
 ```python
-from meshtastic_handler.core.plugin_loader import PluginLoader
+from meshgate.core.plugin_loader import PluginLoader
 
 loader = PluginLoader()
 

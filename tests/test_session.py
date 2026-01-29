@@ -4,8 +4,8 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from meshtastic_handler.core.session import Session
-from meshtastic_handler.core.session_manager import SessionManager
+from meshgate.core.session import Session
+from meshgate.core.session_manager import SessionManager
 
 
 class TestSession:

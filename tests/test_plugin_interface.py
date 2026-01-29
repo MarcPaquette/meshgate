@@ -2,8 +2,8 @@
 
 import pytest
 
-from meshtastic_handler.interfaces.node_context import GPSLocation, NodeContext
-from meshtastic_handler.interfaces.plugin import PluginMetadata, PluginResponse
+from meshgate.interfaces.node_context import GPSLocation, NodeContext
+from meshgate.interfaces.plugin import PluginMetadata, PluginResponse
 
 
 class TestGPSLocation:

@@ -1,6 +1,6 @@
 """Plugin registry for plugin discovery and registration."""
 
-from meshtastic_handler.interfaces.plugin import Plugin
+from meshgate.interfaces.plugin import Plugin
 
 
 class PluginRegistry:

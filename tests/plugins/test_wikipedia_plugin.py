@@ -4,8 +4,8 @@ import pytest
 import respx
 from httpx import Response
 
-from meshtastic_handler.interfaces.node_context import NodeContext
-from meshtastic_handler.plugins.wikipedia_plugin import WikipediaPlugin
+from meshgate.interfaces.node_context import NodeContext
+from meshgate.plugins.wikipedia_plugin import WikipediaPlugin
 
 
 class TestWikipediaPlugin:

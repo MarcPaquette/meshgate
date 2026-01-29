@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from meshtastic_handler.interfaces.node_context import NodeContext
-from meshtastic_handler.plugins.gopher_plugin import GopherPlugin
+from meshgate.interfaces.node_context import NodeContext
+from meshgate.plugins.gopher_plugin import GopherPlugin
 
 
 class TestGopherPlugin:

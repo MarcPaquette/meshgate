@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from meshtastic_handler.config import Config
+from meshgate.config import Config
 
 
 class TestConfig:

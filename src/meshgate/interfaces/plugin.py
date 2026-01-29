@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
 
-from meshtastic_handler.interfaces.node_context import NodeContext
+from meshgate.interfaces.node_context import NodeContext
 
 
 @dataclass(frozen=True)
@@ -74,7 +74,7 @@ class Plugin(ABC):
 
     HTTP Plugins:
         For plugins that make HTTP requests, inherit from HTTPPluginBase
-        in meshtastic_handler.plugins.base for common error handling.
+        in meshgate.plugins.base for common error handling.
 
     Example implementation:
         class MyPlugin(Plugin):

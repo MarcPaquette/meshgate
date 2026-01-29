@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta
 
-from meshtastic_handler.core.session import Session
+from meshgate.core.session import Session
 
 
 class SessionManager:
