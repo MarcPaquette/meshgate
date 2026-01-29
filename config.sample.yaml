@@ -1,0 +1,36 @@
+# Meshtastic Handler Server Configuration
+# Copy this file to config.yaml and customize as needed
+
+server:
+  max_message_size: 200          # Maximum message size in bytes (Meshtastic limit)
+  ack_timeout_seconds: 30.0      # Timeout waiting for message acknowledgment
+  session_timeout_minutes: 60    # Session expiry for inactive nodes
+
+meshtastic:
+  connection_type: serial        # Options: serial, tcp, ble
+  device: null                   # Serial device path (e.g., /dev/ttyUSB0)
+  tcp_host: null                 # TCP host for network connection
+  tcp_port: 4403                 # TCP port for network connection
+
+plugins:
+  gopher:
+    root_directory: ./gopher_content  # Directory to serve files from
+    allow_escape: false               # Allow navigation outside root (security risk)
+
+  llm:
+    ollama_url: http://localhost:11434  # Ollama API endpoint
+    model: llama3.2                     # Default model to use
+    max_response_length: 400            # Truncate responses to this length
+    timeout: 30.0                       # Request timeout in seconds
+
+  weather:
+    timeout: 10.0                # Request timeout in seconds
+
+  wikipedia:
+    language: en                 # Wikipedia language code (en, de, fr, etc.)
+    max_summary_length: 400      # Truncate summaries to this length
+    timeout: 10.0                # Request timeout in seconds
+
+# Directories to scan for external plugins
+plugin_paths:
+  - ./external_plugins
