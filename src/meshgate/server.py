@@ -6,7 +6,9 @@ import logging
 from meshgate.config import Config
 from meshgate.core.content_chunker import ContentChunker
 from meshgate.core.message_router import MessageRouter
+from meshgate.core.node_filter import NodeFilter
 from meshgate.core.plugin_registry import PluginRegistry
+from meshgate.core.rate_limiter import RateLimiter
 from meshgate.core.session_manager import SessionManager
 from meshgate.interfaces.message_transport import IncomingMessage, MessageTransport
 from meshgate.plugins.gopher_plugin import GopherPlugin
@@ -45,14 +47,33 @@ class HandlerServer:
         """
         self._config = config or Config.default()
         self._running = False
+        self._cleanup_task: asyncio.Task | None = None
 
         # Initialize components
         self._registry = PluginRegistry()
         self._session_manager = SessionManager(
-            session_timeout_minutes=self._config.server.session_timeout_minutes
+            session_timeout_minutes=self._config.server.session_timeout_minutes,
+            max_sessions=self._config.server.max_sessions,
         )
         self._router = MessageRouter(self._registry)
         self._chunker = ContentChunker(max_size=self._config.server.max_message_size)
+
+        # Create node filter from security config
+        security = self._config.security
+        self._node_filter: NodeFilter | None = None
+        if security.node_allowlist or security.node_denylist or security.require_allowlist:
+            self._node_filter = NodeFilter(
+                allowlist=security.node_allowlist,
+                denylist=security.node_denylist,
+                require_allowlist=security.require_allowlist,
+            )
+
+        # Create rate limiter
+        self._rate_limiter = RateLimiter(
+            max_messages=security.rate_limit_messages,
+            window_seconds=security.rate_limit_window_seconds,
+            enabled=security.rate_limit_enabled,
+        )
 
         # Create or use provided transport
         if transport is not None:
@@ -63,6 +84,7 @@ class HandlerServer:
                 device=self._config.meshtastic.device,
                 tcp_host=self._config.meshtastic.tcp_host,
                 tcp_port=self._config.meshtastic.tcp_port,
+                node_filter=self._node_filter,
             )
 
         # Register built-in plugins
@@ -105,6 +127,9 @@ class HandlerServer:
             await self._transport.connect()
             self._running = True
 
+            # Start periodic cleanup task
+            self._cleanup_task = asyncio.create_task(self._periodic_cleanup())
+
             logger.info("Server started. Listening for messages...")
 
             # Main message processing loop
@@ -123,8 +148,41 @@ class HandlerServer:
         """Stop the server and disconnect."""
         logger.info("Stopping server...")
         self._running = False
+
+        # Cancel cleanup task if running
+        if self._cleanup_task is not None:
+            self._cleanup_task.cancel()
+            try:
+                await self._cleanup_task
+            except asyncio.CancelledError:
+                pass
+            self._cleanup_task = None
+
         await self._transport.disconnect()
         logger.info("Server stopped")
+
+    async def _periodic_cleanup(self) -> None:
+        """Periodically clean up expired sessions and rate limiter data."""
+        interval_seconds = self._config.server.session_cleanup_interval_minutes * 60
+        while self._running:
+            try:
+                await asyncio.sleep(interval_seconds)
+                if self._running:
+                    # Clean up expired sessions
+                    removed = self._session_manager.cleanup_expired_sessions()
+                    if removed > 0:
+                        logger.info(f"Cleaned up {removed} expired sessions")
+
+                    # Clean up inactive rate limiter data
+                    rate_removed = self._rate_limiter.cleanup_inactive()
+                    if rate_removed > 0:
+                        logger.debug(
+                            f"Cleaned up rate limit data for {rate_removed} nodes"
+                        )
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Error during cleanup: {e}")
 
     async def _handle_message(self, incoming: IncomingMessage) -> None:
         """Handle an incoming message.
@@ -135,6 +193,15 @@ class HandlerServer:
         try:
             node_id = incoming.context.node_id
             logger.debug(f"Message from {node_id}: {incoming.text}")
+
+            # Check rate limit
+            rate_result = self._rate_limiter.check(node_id)
+            if not rate_result.allowed:
+                retry_seconds = int(rate_result.retry_after_seconds or 0)
+                await self._send_response(
+                    node_id, f"Rate limited. Try in {retry_seconds}s"
+                )
+                return
 
             # Get or create session
             session = self._session_manager.get_session(node_id)

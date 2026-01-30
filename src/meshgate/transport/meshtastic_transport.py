@@ -1,8 +1,11 @@
 """Meshtastic transport implementation."""
 
+from __future__ import annotations
+
 import asyncio
 import logging
 from collections.abc import AsyncIterator
+from typing import TYPE_CHECKING
 
 from meshgate.interfaces.message_transport import (
     IncomingMessage,
@@ -10,6 +13,9 @@ from meshgate.interfaces.message_transport import (
     MessageTransport,
 )
 from meshgate.interfaces.node_context import GPSLocation, NodeContext
+
+if TYPE_CHECKING:
+    from meshgate.core.node_filter import NodeFilter
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +32,7 @@ class MeshtasticTransport(MessageTransport):
         device: str | None = None,
         tcp_host: str | None = None,
         tcp_port: int = 4403,
+        node_filter: NodeFilter | None = None,
     ) -> None:
         """Initialize the Meshtastic transport.
 
@@ -34,11 +41,13 @@ class MeshtasticTransport(MessageTransport):
             device: Device path for serial (None for auto-detect)
             tcp_host: Host address for TCP connection
             tcp_port: Port for TCP connection
+            node_filter: Optional node filter for allowlist/denylist enforcement
         """
         self._connection_type = connection_type
         self._device = device
         self._tcp_host = tcp_host
         self._tcp_port = tcp_port
+        self._node_filter = node_filter
 
         self._interface = None
         self._message_handler: MessageHandler | None = None
@@ -166,6 +175,10 @@ class MeshtasticTransport(MessageTransport):
             # Extract sender info
             from_id = packet.get("fromId", "")
             if not from_id:
+                return
+
+            # Check node filter if configured
+            if self._node_filter is not None and not self._node_filter.is_allowed(from_id):
                 return
 
             # Try to get node info

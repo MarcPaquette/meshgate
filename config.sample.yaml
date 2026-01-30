@@ -1,10 +1,12 @@
-# Meshtastic Handler Server Configuration
+# Meshgate Configuration
 # Copy this file to config.yaml and customize as needed
 
 server:
   max_message_size: 200          # Maximum message size in bytes (Meshtastic limit)
   ack_timeout_seconds: 30.0      # Timeout waiting for message acknowledgment
   session_timeout_minutes: 60    # Session expiry for inactive nodes
+  session_cleanup_interval_minutes: 5  # How often to run session cleanup
+  max_sessions: 0                # Max concurrent sessions (0 = unlimited)
 
 meshtastic:
   connection_type: serial        # Options: serial, tcp, ble
@@ -30,6 +32,18 @@ plugins:
     language: en                 # Wikipedia language code (en, de, fr, etc.)
     max_summary_length: 400      # Truncate summaries to this length
     timeout: 10.0                # Request timeout in seconds
+
+# Security settings (all features opt-in, disabled by default)
+security:
+  # Node filtering
+  node_allowlist: []             # Empty = allow all (unless require_allowlist is true)
+  node_denylist: []              # Always blocks these nodes
+  require_allowlist: false       # If true, only allowlisted nodes can connect
+
+  # Rate limiting
+  rate_limit_enabled: false      # Enable rate limiting per node
+  rate_limit_messages: 10        # Max messages per window
+  rate_limit_window_seconds: 60  # Sliding window size in seconds
 
 # Directories to scan for external plugins
 plugin_paths:

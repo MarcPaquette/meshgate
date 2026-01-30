@@ -174,3 +174,62 @@ class TestSessionManager:
         assert len(sessions) == 2
         node_ids = {s.node_id for s in sessions}
         assert node_ids == {"!node1", "!node2"}
+
+    def test_max_sessions_enforced(self) -> None:
+        """Test that max_sessions limit is enforced."""
+        manager = SessionManager(max_sessions=2)
+        manager.get_session("!node1")
+        manager.get_session("!node2")
+
+        assert manager.active_session_count == 2
+
+        # Creating a third session should evict the oldest
+        manager.get_session("!node3")
+
+        assert manager.active_session_count == 2
+        # node1 was oldest (created first), should be evicted
+        assert manager.get_existing_session("!node1") is None
+        assert manager.get_existing_session("!node2") is not None
+        assert manager.get_existing_session("!node3") is not None
+
+    def test_max_sessions_evicts_oldest_by_activity(self) -> None:
+        """Test that eviction is based on last_activity, not creation time."""
+        manager = SessionManager(max_sessions=2)
+
+        # Create sessions and manually set activity times
+        session1 = manager.get_session("!node1")
+        session2 = manager.get_session("!node2")
+
+        # Make node1 more recently active than node2
+        session2.last_activity = datetime.now() - timedelta(hours=1)
+        session1.last_activity = datetime.now()
+
+        # Creating a third session should evict node2 (oldest activity)
+        manager.get_session("!node3")
+
+        assert manager.active_session_count == 2
+        assert manager.get_existing_session("!node1") is not None
+        assert manager.get_existing_session("!node2") is None
+        assert manager.get_existing_session("!node3") is not None
+
+    def test_max_sessions_zero_means_unlimited(self) -> None:
+        """Test that max_sessions=0 means unlimited sessions."""
+        manager = SessionManager(max_sessions=0)
+
+        # Create many sessions
+        for i in range(100):
+            manager.get_session(f"!node{i}")
+
+        assert manager.active_session_count == 100
+
+    def test_get_existing_session_does_not_evict(self) -> None:
+        """Test that get_existing_session doesn't trigger eviction."""
+        manager = SessionManager(max_sessions=2)
+        manager.get_session("!node1")
+        manager.get_session("!node2")
+
+        # get_existing_session for a new node should return None, not evict
+        result = manager.get_existing_session("!node3")
+
+        assert result is None
+        assert manager.active_session_count == 2

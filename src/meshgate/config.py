@@ -14,6 +14,8 @@ class ServerConfig:
     max_message_size: int = 200
     ack_timeout_seconds: float = 30.0
     session_timeout_minutes: int = 60
+    session_cleanup_interval_minutes: int = 5  # How often to run cleanup
+    max_sessions: int = 0  # Max concurrent sessions (0 = unlimited)
 
 
 @dataclass
@@ -71,12 +73,28 @@ class PluginsConfig:
 
 
 @dataclass
+class SecurityConfig:
+    """Security configuration settings."""
+
+    # Node filtering
+    node_allowlist: list[str] = field(default_factory=list)  # Empty = allow all
+    node_denylist: list[str] = field(default_factory=list)
+    require_allowlist: bool = False  # If True, only allowlisted nodes can connect
+
+    # Rate limiting
+    rate_limit_enabled: bool = False
+    rate_limit_messages: int = 10  # Max messages per window
+    rate_limit_window_seconds: int = 60
+
+
+@dataclass
 class Config:
     """Main configuration container."""
 
     server: ServerConfig = field(default_factory=ServerConfig)
     meshtastic: MeshtasticConfig = field(default_factory=MeshtasticConfig)
     plugins: PluginsConfig = field(default_factory=PluginsConfig)
+    security: SecurityConfig = field(default_factory=SecurityConfig)
     plugin_paths: list[str] = field(default_factory=lambda: ["./external_plugins"])
 
     @classmethod
@@ -94,6 +112,10 @@ class Config:
             max_message_size=server_data.get("max_message_size", 200),
             ack_timeout_seconds=server_data.get("ack_timeout_seconds", 30.0),
             session_timeout_minutes=server_data.get("session_timeout_minutes", 60),
+            session_cleanup_interval_minutes=server_data.get(
+                "session_cleanup_interval_minutes", 5
+            ),
+            max_sessions=server_data.get("max_sessions", 0),
         )
 
         mesh_data = data.get("meshtastic", {})
@@ -139,12 +161,23 @@ class Config:
             wikipedia=wikipedia,
         )
 
+        security_data = data.get("security", {})
+        security = SecurityConfig(
+            node_allowlist=security_data.get("node_allowlist", []),
+            node_denylist=security_data.get("node_denylist", []),
+            require_allowlist=security_data.get("require_allowlist", False),
+            rate_limit_enabled=security_data.get("rate_limit_enabled", False),
+            rate_limit_messages=security_data.get("rate_limit_messages", 10),
+            rate_limit_window_seconds=security_data.get("rate_limit_window_seconds", 60),
+        )
+
         plugin_paths = data.get("plugin_paths", ["./external_plugins"])
 
         return cls(
             server=server,
             meshtastic=meshtastic,
             plugins=plugins,
+            security=security,
             plugin_paths=plugin_paths,
         )
 
@@ -187,6 +220,8 @@ class Config:
                 "max_message_size": self.server.max_message_size,
                 "ack_timeout_seconds": self.server.ack_timeout_seconds,
                 "session_timeout_minutes": self.server.session_timeout_minutes,
+                "session_cleanup_interval_minutes": self.server.session_cleanup_interval_minutes,
+                "max_sessions": self.server.max_sessions,
             },
             "meshtastic": {
                 "connection_type": self.meshtastic.connection_type,
@@ -213,6 +248,14 @@ class Config:
                     "max_summary_length": self.plugins.wikipedia.max_summary_length,
                     "timeout": self.plugins.wikipedia.timeout,
                 },
+            },
+            "security": {
+                "node_allowlist": self.security.node_allowlist,
+                "node_denylist": self.security.node_denylist,
+                "require_allowlist": self.security.require_allowlist,
+                "rate_limit_enabled": self.security.rate_limit_enabled,
+                "rate_limit_messages": self.security.rate_limit_messages,
+                "rate_limit_window_seconds": self.security.rate_limit_window_seconds,
             },
             "plugin_paths": self.plugin_paths,
         }

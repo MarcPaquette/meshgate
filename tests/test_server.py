@@ -244,3 +244,162 @@ class TestHandlerServerLifecycle:
         _, first_message = mock_transport.sent_messages[0]
         # Either single message or first chunk with marker
         assert first_message  # Non-empty
+
+
+class TestHandlerServerCleanup:
+    """Tests for server cleanup functionality."""
+
+    @pytest.fixture
+    def mock_transport(self) -> MockTransport:
+        """Create a mock transport."""
+        return MockTransport()
+
+    @pytest.mark.asyncio
+    async def test_cleanup_task_started(self, mock_transport: MockTransport) -> None:
+        """Test that cleanup task is started when server starts."""
+        config = Config.default()
+        config.server.session_cleanup_interval_minutes = 1
+        server = HandlerServer(config=config, transport=mock_transport)
+
+        # Start server
+        server_task = asyncio.create_task(server.start())
+        await asyncio.sleep(0.1)
+
+        # Cleanup task should be running
+        assert server._cleanup_task is not None
+        assert not server._cleanup_task.done()
+
+        # Stop server
+        await server.stop()
+        server_task.cancel()
+        try:
+            await server_task
+        except asyncio.CancelledError:
+            pass
+
+    @pytest.mark.asyncio
+    async def test_cleanup_task_cancelled_on_stop(
+        self, mock_transport: MockTransport
+    ) -> None:
+        """Test that cleanup task is cancelled when server stops."""
+        config = Config.default()
+        server = HandlerServer(config=config, transport=mock_transport)
+
+        # Start server
+        server_task = asyncio.create_task(server.start())
+        await asyncio.sleep(0.1)
+
+        cleanup_task = server._cleanup_task
+
+        # Stop server
+        await server.stop()
+        server_task.cancel()
+        try:
+            await server_task
+        except asyncio.CancelledError:
+            pass
+
+        # Cleanup task should be cancelled or done
+        assert cleanup_task is not None
+        assert cleanup_task.done() or cleanup_task.cancelled()
+
+    @pytest.mark.asyncio
+    async def test_max_sessions_passed_to_session_manager(
+        self, mock_transport: MockTransport
+    ) -> None:
+        """Test that max_sessions config is passed to SessionManager."""
+        config = Config.default()
+        config.server.max_sessions = 5
+        server = HandlerServer(config=config, transport=mock_transport)
+
+        assert server.session_manager._max_sessions == 5
+
+
+class TestHandlerServerRateLimiting:
+    """Tests for server rate limiting functionality."""
+
+    @pytest.fixture
+    def mock_transport(self) -> MockTransport:
+        """Create a mock transport."""
+        return MockTransport()
+
+    @pytest.mark.asyncio
+    async def test_rate_limiter_initialized(self, mock_transport: MockTransport) -> None:
+        """Test that rate limiter is initialized from config."""
+        config = Config.default()
+        config.security.rate_limit_enabled = True
+        config.security.rate_limit_messages = 5
+        config.security.rate_limit_window_seconds = 30
+        server = HandlerServer(config=config, transport=mock_transport)
+
+        assert server._rate_limiter.enabled is True
+        assert server._rate_limiter.max_messages == 5
+        assert server._rate_limiter.window_seconds == 30
+
+    @pytest.mark.asyncio
+    async def test_rate_limit_blocks_excessive_messages(
+        self, mock_transport: MockTransport
+    ) -> None:
+        """Test that rate limiting blocks excessive messages."""
+        config = Config.default()
+        config.security.rate_limit_enabled = True
+        config.security.rate_limit_messages = 2
+        config.security.rate_limit_window_seconds = 60
+        server = HandlerServer(config=config, transport=mock_transport)
+
+        # Start server
+        server_task = asyncio.create_task(server.start())
+        await asyncio.sleep(0.1)
+
+        # Send messages (first 2 should work, 3rd should be rate limited)
+        mock_transport.inject_message("hello", node_id="!test123")
+        await asyncio.sleep(0.1)
+        mock_transport.inject_message("world", node_id="!test123")
+        await asyncio.sleep(0.1)
+        mock_transport.inject_message("blocked", node_id="!test123")
+        await asyncio.sleep(0.2)
+
+        await server.stop()
+        server_task.cancel()
+        try:
+            await server_task
+        except asyncio.CancelledError:
+            pass
+
+        # Check that rate limit message was sent
+        messages = [msg for _, msg in mock_transport.sent_messages]
+        rate_limit_msgs = [m for m in messages if "Rate limited" in m]
+        assert len(rate_limit_msgs) >= 1
+
+    @pytest.mark.asyncio
+    async def test_rate_limit_disabled_allows_all(
+        self, mock_transport: MockTransport
+    ) -> None:
+        """Test that disabled rate limiting allows all messages."""
+        config = Config.default()
+        config.security.rate_limit_enabled = False
+        config.security.rate_limit_messages = 1  # Would block immediately if enabled
+        server = HandlerServer(config=config, transport=mock_transport)
+
+        # Start server
+        server_task = asyncio.create_task(server.start())
+        await asyncio.sleep(0.1)
+
+        # Send many messages
+        for i in range(5):
+            mock_transport.inject_message(f"msg{i}", node_id="!test123")
+            await asyncio.sleep(0.05)
+
+        await asyncio.sleep(0.2)
+
+        await server.stop()
+        server_task.cancel()
+        try:
+            await server_task
+        except asyncio.CancelledError:
+            pass
+
+        # Check no rate limit messages
+        messages = [msg for _, msg in mock_transport.sent_messages]
+        rate_limit_msgs = [m for m in messages if "Rate limited" in m]
+        assert len(rate_limit_msgs) == 0

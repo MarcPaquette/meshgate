@@ -1,8 +1,11 @@
 """Session manager for multi-node session management."""
 
+import logging
 from datetime import datetime, timedelta
 
 from meshgate.core.session import Session
+
+logger = logging.getLogger(__name__)
 
 
 class SessionManager:
@@ -12,6 +15,7 @@ class SessionManager:
     - Retrieves existing session by node_id
     - Each node has completely independent state
     - Expired sessions cleaned up after configurable timeout
+    - Optionally enforces max session limit with LRU eviction
 
     Example with multiple nodes:
         Node !abc → sends "2" → enters LLM plugin
@@ -20,17 +24,24 @@ class SessionManager:
         Node !xyz → sends "!exit" → returns to menu (abc unaffected)
     """
 
-    def __init__(self, session_timeout_minutes: int = 60) -> None:
+    def __init__(
+        self, session_timeout_minutes: int = 60, max_sessions: int = 0
+    ) -> None:
         """Initialize the session manager.
 
         Args:
             session_timeout_minutes: Time in minutes before inactive sessions are cleaned up
+            max_sessions: Maximum number of concurrent sessions (0 = unlimited)
         """
         self._sessions: dict[str, Session] = {}
         self._timeout = timedelta(minutes=session_timeout_minutes)
+        self._max_sessions = max_sessions
 
     def get_session(self, node_id: str) -> Session:
         """Get or create a session for a node.
+
+        If max_sessions is set and creating a new session would exceed the limit,
+        the oldest (least recently active) session is evicted first.
 
         Args:
             node_id: The Meshtastic node ID
@@ -39,10 +50,31 @@ class SessionManager:
             The session for the node (creates new if doesn't exist)
         """
         if node_id not in self._sessions:
+            # Enforce max sessions limit before creating new session
+            if self._max_sessions > 0:
+                while len(self._sessions) >= self._max_sessions:
+                    self._evict_oldest_session()
             self._sessions[node_id] = Session(node_id=node_id)
         session = self._sessions[node_id]
         session.update_activity()
         return session
+
+    def _evict_oldest_session(self) -> str | None:
+        """Evict the oldest (least recently active) session.
+
+        Returns:
+            The node_id of the evicted session, or None if no sessions to evict
+        """
+        if not self._sessions:
+            return None
+
+        # Find session with oldest last_activity
+        oldest_node_id = min(
+            self._sessions.keys(), key=lambda nid: self._sessions[nid].last_activity
+        )
+        del self._sessions[oldest_node_id]
+        logger.info(f"Evicted oldest session for node {oldest_node_id} (max sessions reached)")
+        return oldest_node_id
 
     def get_existing_session(self, node_id: str) -> Session | None:
         """Get an existing session without creating a new one.
