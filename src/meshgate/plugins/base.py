@@ -161,6 +161,22 @@ class HTTPPluginBase(Plugin, ABC):
             logger.error(f"POST error to {self._service_name}: {e}")
             return self._error_response(f"Request to {self._service_name} failed")
 
+    @staticmethod
+    def _truncate(text: str, max_length: int, suffix: str = "...") -> str:
+        """Truncate text to a maximum length with a suffix.
+
+        Args:
+            text: Text to truncate
+            max_length: Maximum length including suffix
+            suffix: Suffix to add when truncating (default: "...")
+
+        Returns:
+            Truncated text with suffix, or original if within limit
+        """
+        if len(text) <= max_length:
+            return text
+        return text[: max_length - len(suffix)] + suffix
+
     def _error_response(
         self,
         message: str,

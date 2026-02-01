@@ -4,6 +4,10 @@ import pytest
 
 from meshgate.interfaces.node_context import GPSLocation, NodeContext
 from meshgate.interfaces.plugin import PluginMetadata, PluginResponse
+from meshgate.plugins.gopher_plugin import GopherPlugin
+from meshgate.plugins.llm_plugin import LLMPlugin
+from meshgate.plugins.weather_plugin import WeatherPlugin
+from meshgate.plugins.wikipedia_plugin import WikipediaPlugin
 
 
 class TestGPSLocation:
@@ -137,3 +141,52 @@ class TestPluginResponse:
             exit_plugin=True,
         )
         assert resp.exit_plugin is True
+
+
+class TestBuiltinPluginMetadata:
+    """Parametrized tests for all built-in plugin metadata."""
+
+    @pytest.mark.parametrize(
+        "plugin_class,expected_name,expected_menu,expected_commands",
+        [
+            (GopherPlugin, "Gopher Server", 1, ("!back", "!home")),
+            (LLMPlugin, "LLM Assistant", 2, ("!model", "!clear")),
+            (WeatherPlugin, "Weather", 3, ("!forecast", "!refresh")),
+            (WikipediaPlugin, "Wikipedia", 4, ("!search", "!random")),
+        ],
+    )
+    def test_builtin_plugin_metadata(
+        self,
+        plugin_class: type,
+        expected_name: str,
+        expected_menu: int,
+        expected_commands: tuple[str, ...],
+    ) -> None:
+        """Test that built-in plugins have correct metadata."""
+        plugin = plugin_class()
+        meta = plugin.metadata
+
+        assert meta.name == expected_name
+        assert meta.menu_number == expected_menu
+        for cmd in expected_commands:
+            assert cmd in meta.commands, f"Expected command {cmd} not found"
+
+    @pytest.mark.parametrize(
+        "plugin_class",
+        [GopherPlugin, LLMPlugin, WeatherPlugin, WikipediaPlugin],
+    )
+    def test_builtin_plugin_has_welcome_message(self, plugin_class: type) -> None:
+        """Test that all built-in plugins have non-empty welcome messages."""
+        plugin = plugin_class()
+        assert plugin.get_welcome_message()
+
+    @pytest.mark.parametrize(
+        "plugin_class",
+        [GopherPlugin, LLMPlugin, WeatherPlugin, WikipediaPlugin],
+    )
+    def test_builtin_plugin_has_help_text(self, plugin_class: type) -> None:
+        """Test that all built-in plugins have non-empty help text."""
+        plugin = plugin_class()
+        help_text = plugin.get_help_text()
+        assert help_text
+        assert "!exit" in help_text  # All plugins should mention exit command

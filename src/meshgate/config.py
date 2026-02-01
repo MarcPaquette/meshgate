@@ -1,10 +1,58 @@
 """Configuration loading from YAML files."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 import yaml
+
+T = TypeVar("T")
+
+
+def _dataclass_from_dict(cls: type[T], data: dict[str, Any]) -> T:
+    """Create a dataclass instance from a dictionary.
+
+    Uses dataclass field introspection to automatically map dict keys to fields,
+    using field defaults when keys are missing.
+
+    Args:
+        cls: The dataclass type to instantiate
+        data: Dictionary with field values
+
+    Returns:
+        Instance of the dataclass with values from dict (or defaults)
+    """
+    kwargs = {}
+    for f in fields(cls):
+        if f.name in data:
+            kwargs[f.name] = data[f.name]
+        # If not in data, dataclass will use its own default
+    return cls(**kwargs)
+
+
+def _dataclass_to_dict(obj: Any) -> dict[str, Any]:
+    """Convert a dataclass instance to a dictionary.
+
+    Recursively handles nested dataclasses.
+
+    Args:
+        obj: Dataclass instance to convert
+
+    Returns:
+        Dictionary representation of the dataclass
+    """
+    result = {}
+    for f in fields(obj):
+        value = getattr(obj, f.name)
+        # Check if value is itself a dataclass (has __dataclass_fields__)
+        if hasattr(value, "__dataclass_fields__"):
+            result[f.name] = _dataclass_to_dict(value)
+        elif isinstance(value, list):
+            # Handle lists (e.g., plugin_paths, allowlist)
+            result[f.name] = value.copy() if value else []
+        else:
+            result[f.name] = value
+    return result
 
 
 @dataclass
@@ -107,78 +155,21 @@ class Config:
         Returns:
             Config instance
         """
-        server_data = data.get("server", {})
-        server = ServerConfig(
-            max_message_size=server_data.get("max_message_size", 200),
-            ack_timeout_seconds=server_data.get("ack_timeout_seconds", 30.0),
-            session_timeout_minutes=server_data.get("session_timeout_minutes", 60),
-            session_cleanup_interval_minutes=server_data.get(
-                "session_cleanup_interval_minutes", 5
-            ),
-            max_sessions=server_data.get("max_sessions", 0),
-        )
-
-        mesh_data = data.get("meshtastic", {})
-        meshtastic = MeshtasticConfig(
-            connection_type=mesh_data.get("connection_type", "serial"),
-            device=mesh_data.get("device"),
-            tcp_host=mesh_data.get("tcp_host"),
-            tcp_port=mesh_data.get("tcp_port", 4403),
-        )
-
+        # Build nested plugin configs
         plugins_data = data.get("plugins", {})
-
-        gopher_data = plugins_data.get("gopher", {})
-        gopher = GopherConfig(
-            root_directory=gopher_data.get("root_directory", "./gopher_content"),
-            allow_escape=gopher_data.get("allow_escape", False),
-        )
-
-        llm_data = plugins_data.get("llm", {})
-        llm = LLMConfig(
-            ollama_url=llm_data.get("ollama_url", "http://localhost:11434"),
-            model=llm_data.get("model", "llama3.2"),
-            max_response_length=llm_data.get("max_response_length", 400),
-            timeout=llm_data.get("timeout", 30.0),
-        )
-
-        weather_data = plugins_data.get("weather", {})
-        weather = WeatherConfig(
-            timeout=weather_data.get("timeout", 10.0),
-        )
-
-        wiki_data = plugins_data.get("wikipedia", {})
-        wikipedia = WikipediaConfig(
-            language=wiki_data.get("language", "en"),
-            max_summary_length=wiki_data.get("max_summary_length", 400),
-            timeout=wiki_data.get("timeout", 10.0),
-        )
-
         plugins = PluginsConfig(
-            gopher=gopher,
-            llm=llm,
-            weather=weather,
-            wikipedia=wikipedia,
+            gopher=_dataclass_from_dict(GopherConfig, plugins_data.get("gopher", {})),
+            llm=_dataclass_from_dict(LLMConfig, plugins_data.get("llm", {})),
+            weather=_dataclass_from_dict(WeatherConfig, plugins_data.get("weather", {})),
+            wikipedia=_dataclass_from_dict(WikipediaConfig, plugins_data.get("wikipedia", {})),
         )
-
-        security_data = data.get("security", {})
-        security = SecurityConfig(
-            node_allowlist=security_data.get("node_allowlist", []),
-            node_denylist=security_data.get("node_denylist", []),
-            require_allowlist=security_data.get("require_allowlist", False),
-            rate_limit_enabled=security_data.get("rate_limit_enabled", False),
-            rate_limit_messages=security_data.get("rate_limit_messages", 10),
-            rate_limit_window_seconds=security_data.get("rate_limit_window_seconds", 60),
-        )
-
-        plugin_paths = data.get("plugin_paths", ["./external_plugins"])
 
         return cls(
-            server=server,
-            meshtastic=meshtastic,
+            server=_dataclass_from_dict(ServerConfig, data.get("server", {})),
+            meshtastic=_dataclass_from_dict(MeshtasticConfig, data.get("meshtastic", {})),
             plugins=plugins,
-            security=security,
-            plugin_paths=plugin_paths,
+            security=_dataclass_from_dict(SecurityConfig, data.get("security", {})),
+            plugin_paths=data.get("plugin_paths", ["./external_plugins"]),
         )
 
     @classmethod
@@ -215,50 +206,7 @@ class Config:
         Returns:
             Configuration as dictionary
         """
-        return {
-            "server": {
-                "max_message_size": self.server.max_message_size,
-                "ack_timeout_seconds": self.server.ack_timeout_seconds,
-                "session_timeout_minutes": self.server.session_timeout_minutes,
-                "session_cleanup_interval_minutes": self.server.session_cleanup_interval_minutes,
-                "max_sessions": self.server.max_sessions,
-            },
-            "meshtastic": {
-                "connection_type": self.meshtastic.connection_type,
-                "device": self.meshtastic.device,
-                "tcp_host": self.meshtastic.tcp_host,
-                "tcp_port": self.meshtastic.tcp_port,
-            },
-            "plugins": {
-                "gopher": {
-                    "root_directory": self.plugins.gopher.root_directory,
-                    "allow_escape": self.plugins.gopher.allow_escape,
-                },
-                "llm": {
-                    "ollama_url": self.plugins.llm.ollama_url,
-                    "model": self.plugins.llm.model,
-                    "max_response_length": self.plugins.llm.max_response_length,
-                    "timeout": self.plugins.llm.timeout,
-                },
-                "weather": {
-                    "timeout": self.plugins.weather.timeout,
-                },
-                "wikipedia": {
-                    "language": self.plugins.wikipedia.language,
-                    "max_summary_length": self.plugins.wikipedia.max_summary_length,
-                    "timeout": self.plugins.wikipedia.timeout,
-                },
-            },
-            "security": {
-                "node_allowlist": self.security.node_allowlist,
-                "node_denylist": self.security.node_denylist,
-                "require_allowlist": self.security.require_allowlist,
-                "rate_limit_enabled": self.security.rate_limit_enabled,
-                "rate_limit_messages": self.security.rate_limit_messages,
-                "rate_limit_window_seconds": self.security.rate_limit_window_seconds,
-            },
-            "plugin_paths": self.plugin_paths,
-        }
+        return _dataclass_to_dict(self)
 
     def save_yaml(self, path: str | Path) -> None:
         """Save configuration to YAML file.

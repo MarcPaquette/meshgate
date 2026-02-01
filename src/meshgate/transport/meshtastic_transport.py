@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING
 
 from meshgate.interfaces.message_transport import (
     IncomingMessage,
-    MessageHandler,
     MessageTransport,
 )
 from meshgate.interfaces.node_context import GPSLocation, NodeContext
@@ -50,7 +49,6 @@ class MeshtasticTransport(MessageTransport):
         self._node_filter = node_filter
 
         self._interface = None
-        self._message_handler: MessageHandler | None = None
         self._connected = False
         self._message_queue: asyncio.Queue[IncomingMessage] = asyncio.Queue()
 
@@ -139,14 +137,6 @@ class MeshtasticTransport(MessageTransport):
             logger.error(f"Failed to send message to {node_id}: {e}")
             return False
 
-    def set_message_handler(self, handler: MessageHandler) -> None:
-        """Set the callback for handling incoming messages.
-
-        Args:
-            handler: Async function to call when a message is received
-        """
-        self._message_handler = handler
-
     async def listen(self) -> AsyncIterator[IncomingMessage]:
         """Listen for incoming messages.
 
@@ -207,13 +197,6 @@ class MeshtasticTransport(MessageTransport):
                 self._message_queue.put_nowait(incoming)
             except asyncio.QueueFull:
                 logger.warning("Message queue full, dropping message")
-
-            # Also call handler if set
-            if self._message_handler:
-                # Schedule the async handler
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    asyncio.create_task(self._message_handler(incoming))
 
         except Exception as e:
             logger.error(f"Error processing received message: {e}")

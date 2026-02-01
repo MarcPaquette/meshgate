@@ -6,16 +6,12 @@ import pytest
 
 from meshgate.config import Config
 from meshgate.server import HandlerServer
+from tests.conftest import running_server
 from tests.mocks import MockTransport
 
 
 class TestHandlerServer:
     """Tests for HandlerServer class."""
-
-    @pytest.fixture
-    def mock_transport(self) -> MockTransport:
-        """Create a mock transport."""
-        return MockTransport()
 
     @pytest.fixture
     def server(self, mock_transport: MockTransport) -> HandlerServer:
@@ -66,11 +62,6 @@ class TestHandlerServer:
 
 class TestHandlerServerSingleMessage:
     """Tests for handle_single_message method."""
-
-    @pytest.fixture
-    def mock_transport(self) -> MockTransport:
-        """Create a mock transport."""
-        return MockTransport()
 
     @pytest.fixture
     def server(self, mock_transport: MockTransport) -> HandlerServer:
@@ -161,11 +152,6 @@ class TestHandlerServerLifecycle:
     """Tests for server start/stop lifecycle."""
 
     @pytest.fixture
-    def mock_transport(self) -> MockTransport:
-        """Create a mock transport."""
-        return MockTransport()
-
-    @pytest.fixture
     def server(self, mock_transport: MockTransport) -> HandlerServer:
         """Create a HandlerServer with mock transport."""
         config = Config.default()
@@ -188,25 +174,9 @@ class TestHandlerServerLifecycle:
         self, server: HandlerServer, mock_transport: MockTransport
     ) -> None:
         """Test server can start and receive messages."""
-        # Start server in background
-        server_task = asyncio.create_task(server.start())
-
-        # Wait for server to start
-        await asyncio.sleep(0.1)
-
-        # Inject a message
-        mock_transport.inject_message("", node_id="!test123")
-
-        # Wait for processing
-        await asyncio.sleep(0.2)
-
-        # Stop server
-        await server.stop()
-        server_task.cancel()
-        try:
-            await server_task
-        except asyncio.CancelledError:
-            pass
+        async with running_server(server):
+            mock_transport.inject_message("", node_id="!test123")
+            await asyncio.sleep(0.2)
 
         # Check message was sent
         assert len(mock_transport.sent_messages) > 0
@@ -221,22 +191,9 @@ class TestHandlerServerLifecycle:
         config.server.max_message_size = 30  # Very small to force chunking
         server = HandlerServer(config=config, transport=mock_transport)
 
-        # Start server
-        server_task = asyncio.create_task(server.start())
-        await asyncio.sleep(0.1)
-
-        # Send message that will trigger long response (menu)
-        mock_transport.inject_message("", node_id="!test123")
-
-        # Wait for processing
-        await asyncio.sleep(0.5)
-
-        await server.stop()
-        server_task.cancel()
-        try:
-            await server_task
-        except asyncio.CancelledError:
-            pass
+        async with running_server(server):
+            mock_transport.inject_message("", node_id="!test123")
+            await asyncio.sleep(0.5)
 
         # Should have at least one message sent
         assert len(mock_transport.sent_messages) >= 1
@@ -249,11 +206,6 @@ class TestHandlerServerLifecycle:
 class TestHandlerServerCleanup:
     """Tests for server cleanup functionality."""
 
-    @pytest.fixture
-    def mock_transport(self) -> MockTransport:
-        """Create a mock transport."""
-        return MockTransport()
-
     @pytest.mark.asyncio
     async def test_cleanup_task_started(self, mock_transport: MockTransport) -> None:
         """Test that cleanup task is started when server starts."""
@@ -261,21 +213,10 @@ class TestHandlerServerCleanup:
         config.server.session_cleanup_interval_minutes = 1
         server = HandlerServer(config=config, transport=mock_transport)
 
-        # Start server
-        server_task = asyncio.create_task(server.start())
-        await asyncio.sleep(0.1)
-
-        # Cleanup task should be running
-        assert server._cleanup_task is not None
-        assert not server._cleanup_task.done()
-
-        # Stop server
-        await server.stop()
-        server_task.cancel()
-        try:
-            await server_task
-        except asyncio.CancelledError:
-            pass
+        async with running_server(server):
+            # Cleanup task should be running
+            assert server._cleanup_task is not None
+            assert not server._cleanup_task.done()
 
     @pytest.mark.asyncio
     async def test_cleanup_task_cancelled_on_stop(
@@ -285,19 +226,8 @@ class TestHandlerServerCleanup:
         config = Config.default()
         server = HandlerServer(config=config, transport=mock_transport)
 
-        # Start server
-        server_task = asyncio.create_task(server.start())
-        await asyncio.sleep(0.1)
-
-        cleanup_task = server._cleanup_task
-
-        # Stop server
-        await server.stop()
-        server_task.cancel()
-        try:
-            await server_task
-        except asyncio.CancelledError:
-            pass
+        async with running_server(server):
+            cleanup_task = server._cleanup_task
 
         # Cleanup task should be cancelled or done
         assert cleanup_task is not None
@@ -317,11 +247,6 @@ class TestHandlerServerCleanup:
 
 class TestHandlerServerRateLimiting:
     """Tests for server rate limiting functionality."""
-
-    @pytest.fixture
-    def mock_transport(self) -> MockTransport:
-        """Create a mock transport."""
-        return MockTransport()
 
     @pytest.mark.asyncio
     async def test_rate_limiter_initialized(self, mock_transport: MockTransport) -> None:
@@ -347,24 +272,14 @@ class TestHandlerServerRateLimiting:
         config.security.rate_limit_window_seconds = 60
         server = HandlerServer(config=config, transport=mock_transport)
 
-        # Start server
-        server_task = asyncio.create_task(server.start())
-        await asyncio.sleep(0.1)
-
-        # Send messages (first 2 should work, 3rd should be rate limited)
-        mock_transport.inject_message("hello", node_id="!test123")
-        await asyncio.sleep(0.1)
-        mock_transport.inject_message("world", node_id="!test123")
-        await asyncio.sleep(0.1)
-        mock_transport.inject_message("blocked", node_id="!test123")
-        await asyncio.sleep(0.2)
-
-        await server.stop()
-        server_task.cancel()
-        try:
-            await server_task
-        except asyncio.CancelledError:
-            pass
+        async with running_server(server):
+            # Send messages (first 2 should work, 3rd should be rate limited)
+            mock_transport.inject_message("hello", node_id="!test123")
+            await asyncio.sleep(0.1)
+            mock_transport.inject_message("world", node_id="!test123")
+            await asyncio.sleep(0.1)
+            mock_transport.inject_message("blocked", node_id="!test123")
+            await asyncio.sleep(0.2)
 
         # Check that rate limit message was sent
         messages = [msg for _, msg in mock_transport.sent_messages]
@@ -381,23 +296,12 @@ class TestHandlerServerRateLimiting:
         config.security.rate_limit_messages = 1  # Would block immediately if enabled
         server = HandlerServer(config=config, transport=mock_transport)
 
-        # Start server
-        server_task = asyncio.create_task(server.start())
-        await asyncio.sleep(0.1)
-
-        # Send many messages
-        for i in range(5):
-            mock_transport.inject_message(f"msg{i}", node_id="!test123")
-            await asyncio.sleep(0.05)
-
-        await asyncio.sleep(0.2)
-
-        await server.stop()
-        server_task.cancel()
-        try:
-            await server_task
-        except asyncio.CancelledError:
-            pass
+        async with running_server(server):
+            # Send many messages
+            for i in range(5):
+                mock_transport.inject_message(f"msg{i}", node_id="!test123")
+                await asyncio.sleep(0.05)
+            await asyncio.sleep(0.2)
 
         # Check no rate limit messages
         messages = [msg for _, msg in mock_transport.sent_messages]

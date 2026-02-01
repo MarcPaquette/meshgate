@@ -24,14 +24,6 @@ class TestWeatherPlugin:
             location=GPSLocation(latitude=40.7128, longitude=-74.0060),
         )
 
-    def test_metadata(self, plugin: WeatherPlugin) -> None:
-        """Test plugin metadata."""
-        meta = plugin.metadata
-        assert meta.name == "Weather"
-        assert meta.menu_number == 3
-        assert "!forecast" in meta.commands
-        assert "!refresh" in meta.commands
-
     def test_welcome_message(self, plugin: WeatherPlugin) -> None:
         """Test welcome message."""
         welcome = plugin.get_welcome_message()
@@ -103,21 +95,6 @@ class TestWeatherPlugin:
         assert response.message  # Non-empty
         assert "25" in response.message  # Max temp from mock
 
-    @pytest.mark.asyncio
-    @respx.mock
-    async def test_connection_error(
-        self, plugin: WeatherPlugin, context_with_gps: NodeContext
-    ) -> None:
-        """Test handling connection error."""
-        respx.get("https://api.open-meteo.com/v1/forecast").mock(
-            side_effect=Exception("Connection refused")
-        )
-
-        response = await plugin.handle("!refresh", context_with_gps, {})
-
-        # Should return error message, not crash
-        assert "error" in response.message.lower() or "connect" in response.message.lower()
-
     def test_degrees_to_cardinal(self, plugin: WeatherPlugin) -> None:
         """Test wind direction conversion."""
         assert plugin._degrees_to_cardinal(0) == "N"
@@ -154,21 +131,6 @@ class TestWeatherPlugin:
 
     @pytest.mark.asyncio
     @respx.mock
-    async def test_http_500_error(
-        self, plugin: WeatherPlugin, context_with_gps: NodeContext
-    ) -> None:
-        """Test handling of HTTP 500 server error."""
-        respx.get("https://api.open-meteo.com/v1/forecast").mock(
-            return_value=Response(500, text="Internal Server Error")
-        )
-
-        response = await plugin.handle("!refresh", context_with_gps, {})
-
-        # Should return error message, not crash
-        assert response.message  # Non-empty response
-
-    @pytest.mark.asyncio
-    @respx.mock
     async def test_malformed_json_response(
         self, plugin: WeatherPlugin, context_with_gps: NodeContext
     ) -> None:
@@ -184,19 +146,3 @@ class TestWeatherPlugin:
 
         # Should handle gracefully
         assert response.message  # Non-empty response
-
-    @pytest.mark.asyncio
-    @respx.mock
-    async def test_timeout_error(self, context_with_gps: NodeContext) -> None:
-        """Test handling of timeout."""
-        import httpx
-
-        plugin = WeatherPlugin(timeout=0.001)  # Very short timeout
-        respx.get("https://api.open-meteo.com/v1/forecast").mock(
-            side_effect=httpx.TimeoutException("Timeout")
-        )
-
-        response = await plugin.handle("!refresh", context_with_gps, {})
-
-        # Should return error message, not crash
-        assert response.message

@@ -205,3 +205,29 @@ class TestHTTPPluginBase:
         assert response.message == "Done"
         assert response.plugin_state == {"final": True}
         assert response.exit_plugin is True
+
+    def test_truncate_within_limit(self, plugin: ConcreteHTTPPlugin) -> None:
+        """Test _truncate when text is within limit."""
+        text = "Short text"
+        result = plugin._truncate(text, 100)
+        assert result == text
+
+    def test_truncate_at_exact_limit(self, plugin: ConcreteHTTPPlugin) -> None:
+        """Test _truncate when text is exactly at limit."""
+        text = "Exactly10c"
+        result = plugin._truncate(text, 10)
+        assert result == text
+
+    def test_truncate_exceeds_limit(self, plugin: ConcreteHTTPPlugin) -> None:
+        """Test _truncate when text exceeds limit."""
+        text = "This is a longer text that needs truncation"
+        result = plugin._truncate(text, 20)
+        assert result == "This is a longer ..."
+        assert len(result) == 20
+
+    def test_truncate_custom_suffix(self, plugin: ConcreteHTTPPlugin) -> None:
+        """Test _truncate with custom suffix."""
+        text = "This is a long text"
+        result = plugin._truncate(text, 15, suffix="[more]")
+        assert result == "This is a[more]"
+        assert len(result) == 15

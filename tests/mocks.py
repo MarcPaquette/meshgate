@@ -6,7 +6,6 @@ from typing import Any
 
 from meshgate.interfaces.message_transport import (
     IncomingMessage,
-    MessageHandler,
     MessageTransport,
 )
 from meshgate.interfaces.node_context import NodeContext
@@ -18,7 +17,6 @@ class MockTransport(MessageTransport):
 
     def __init__(self) -> None:
         self._connected = False
-        self._handler: MessageHandler | None = None
         self._message_queue: asyncio.Queue[IncomingMessage] = asyncio.Queue()
         self._sent_messages: list[tuple[str, str]] = []
 
@@ -31,9 +29,6 @@ class MockTransport(MessageTransport):
     async def send_message(self, node_id: str, message: str) -> bool:
         self._sent_messages.append((node_id, message))
         return True
-
-    def set_message_handler(self, handler: MessageHandler) -> None:
-        self._handler = handler
 
     async def listen(self) -> AsyncIterator[IncomingMessage]:
         while self._connected:

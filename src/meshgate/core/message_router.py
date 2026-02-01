@@ -1,25 +1,9 @@
 """Message router for handling menu selection and plugin routing."""
 
-from dataclasses import dataclass
-from typing import Any
-
 from meshgate.core.plugin_registry import PluginRegistry
 from meshgate.core.session import Session
 from meshgate.interfaces.node_context import NodeContext
 from meshgate.interfaces.plugin import PluginResponse
-
-
-@dataclass(frozen=True)
-class RouterResponse:
-    """Response from the message router.
-
-    Attributes:
-        message: The message to send back to the user
-        new_plugin_state: Updated plugin state (if any)
-    """
-
-    message: str
-    new_plugin_state: dict[str, Any] | None = None
 
 
 class MessageRouter:
@@ -61,7 +45,7 @@ class MessageRouter:
         lines.append("Send number to select")
         return "\n".join(lines)
 
-    async def route(self, message: str, session: Session, context: NodeContext) -> RouterResponse:
+    async def route(self, message: str, session: Session, context: NodeContext) -> PluginResponse:
         """Route a message to the appropriate handler.
 
         Args:
@@ -70,7 +54,7 @@ class MessageRouter:
             context: Information about the sending node
 
         Returns:
-            RouterResponse with the message to send back
+            PluginResponse with the message to send back
         """
         message = message.strip()
 
@@ -88,27 +72,27 @@ class MessageRouter:
         # Inside a plugin - route to plugin
         return await self._handle_plugin_message(message, session, context)
 
-    def _handle_exit(self, session: Session) -> RouterResponse:
+    def _handle_exit(self, session: Session) -> PluginResponse:
         """Handle the !exit command.
 
         Args:
             session: The node's session state
 
         Returns:
-            RouterResponse with menu
+            PluginResponse with menu
         """
         session.exit_plugin()
-        return RouterResponse(message=f"Returned to menu.\n\n{self._render_menu()}")
+        return PluginResponse(message=f"Returned to menu.\n\n{self._render_menu()}")
 
-    def _handle_menu(self) -> RouterResponse:
+    def _handle_menu(self) -> PluginResponse:
         """Handle the !menu command.
 
         Returns:
-            RouterResponse with menu
+            PluginResponse with menu
         """
-        return RouterResponse(message=self._render_menu())
+        return PluginResponse(message=self._render_menu())
 
-    async def _handle_menu_selection(self, message: str, session: Session) -> RouterResponse:
+    async def _handle_menu_selection(self, message: str, session: Session) -> PluginResponse:
         """Handle menu number selection.
 
         Args:
@@ -116,31 +100,28 @@ class MessageRouter:
             session: The node's session state
 
         Returns:
-            RouterResponse with plugin welcome or error
+            PluginResponse with plugin welcome or error
         """
         try:
             menu_number = int(message)
         except ValueError:
             # Not a number - show menu again
             menu = self._render_menu()
-            return RouterResponse(message=f"Invalid selection. Please send a number.\n\n{menu}")
+            return PluginResponse(message=f"Invalid selection. Please send a number.\n\n{menu}")
 
         plugin = self._registry.get_by_menu_number(menu_number)
         if plugin is None:
-            return RouterResponse(
+            return PluginResponse(
                 message=f"Invalid selection '{menu_number}'.\n\n{self._render_menu()}"
             )
 
         # Enter the plugin
         session.enter_plugin(plugin.metadata.name)
-        return RouterResponse(
-            message=plugin.get_welcome_message(),
-            new_plugin_state={},
-        )
+        return PluginResponse(message=plugin.get_welcome_message())
 
     async def _handle_plugin_message(
         self, message: str, session: Session, context: NodeContext
-    ) -> RouterResponse:
+    ) -> PluginResponse:
         """Route message to the active plugin.
 
         Args:
@@ -149,17 +130,17 @@ class MessageRouter:
             context: Information about the sending node
 
         Returns:
-            RouterResponse from the plugin
+            PluginResponse from the plugin
         """
         plugin = self._registry.get_by_name(session.active_plugin)
         if plugin is None:
             # Plugin no longer exists - return to menu
             session.exit_plugin()
-            return RouterResponse(message=f"Plugin not available.\n\n{self._render_menu()}")
+            return PluginResponse(message=f"Plugin not available.\n\n{self._render_menu()}")
 
         # Handle !help specially - show plugin's help text
         if message.lower() == self.HELP_COMMAND:
-            return RouterResponse(message=plugin.get_help_text())
+            return PluginResponse(message=plugin.get_help_text())
 
         # Route to plugin
         response: PluginResponse = await plugin.handle(message, context, session.plugin_state)
@@ -171,12 +152,9 @@ class MessageRouter:
         # Check if plugin wants to exit
         if response.exit_plugin:
             session.exit_plugin()
-            return RouterResponse(message=f"{response.message}\n\n{self._render_menu()}")
+            return PluginResponse(message=f"{response.message}\n\n{self._render_menu()}")
 
-        return RouterResponse(
-            message=response.message,
-            new_plugin_state=response.plugin_state,
-        )
+        return response
 
     def get_menu(self) -> str:
         """Get the main menu text.

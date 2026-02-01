@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from dataclasses import asdict
 
 from meshgate.config import Config
 from meshgate.core.content_chunker import ContentChunker
@@ -49,7 +50,13 @@ class HandlerServer:
         self._running = False
         self._cleanup_task: asyncio.Task | None = None
 
-        # Initialize components
+        self._setup_components()
+        self._setup_security()
+        self._setup_transport(transport)
+        self._register_builtin_plugins()
+
+    def _setup_components(self) -> None:
+        """Initialize core server components."""
         self._registry = PluginRegistry()
         self._session_manager = SessionManager(
             session_timeout_minutes=self._config.server.session_timeout_minutes,
@@ -58,8 +65,11 @@ class HandlerServer:
         self._router = MessageRouter(self._registry)
         self._chunker = ContentChunker(max_size=self._config.server.max_message_size)
 
-        # Create node filter from security config
+    def _setup_security(self) -> None:
+        """Initialize security components (node filter, rate limiter)."""
         security = self._config.security
+
+        # Create node filter if any filtering is configured
         self._node_filter: NodeFilter | None = None
         if security.node_allowlist or security.node_denylist or security.require_allowlist:
             self._node_filter = NodeFilter(
@@ -75,7 +85,12 @@ class HandlerServer:
             enabled=security.rate_limit_enabled,
         )
 
-        # Create or use provided transport
+    def _setup_transport(self, transport: MessageTransport | None) -> None:
+        """Initialize the message transport.
+
+        Args:
+            transport: Custom transport or None to create default MeshtasticTransport
+        """
         if transport is not None:
             self._transport = transport
         else:
@@ -87,35 +102,18 @@ class HandlerServer:
                 node_filter=self._node_filter,
             )
 
-        # Register built-in plugins
-        self._register_builtin_plugins()
-
     def _register_builtin_plugins(self) -> None:
         """Register the built-in plugins based on configuration."""
-        # Gopher plugin
-        gopher = GopherPlugin(root_directory=self._config.plugins.gopher.root_directory)
-        self._registry.register(gopher)
+        plugins_cfg = self._config.plugins
 
-        # LLM plugin
-        llm = LLMPlugin(
-            ollama_url=self._config.plugins.llm.ollama_url,
-            model=self._config.plugins.llm.model,
-            max_response_length=self._config.plugins.llm.max_response_length,
-            timeout=self._config.plugins.llm.timeout,
+        # Gopher only uses root_directory (allow_escape is unused)
+        self._registry.register(
+            GopherPlugin(root_directory=plugins_cfg.gopher.root_directory)
         )
-        self._registry.register(llm)
-
-        # Weather plugin
-        weather = WeatherPlugin(timeout=self._config.plugins.weather.timeout)
-        self._registry.register(weather)
-
-        # Wikipedia plugin
-        wikipedia = WikipediaPlugin(
-            language=self._config.plugins.wikipedia.language,
-            max_summary_length=self._config.plugins.wikipedia.max_summary_length,
-            timeout=self._config.plugins.wikipedia.timeout,
-        )
-        self._registry.register(wikipedia)
+        # LLM, Weather, Wikipedia configs map directly to plugin constructors
+        self._registry.register(LLMPlugin(**asdict(plugins_cfg.llm)))
+        self._registry.register(WeatherPlugin(**asdict(plugins_cfg.weather)))
+        self._registry.register(WikipediaPlugin(**asdict(plugins_cfg.wikipedia)))
 
         logger.info(f"Registered {self._registry.plugin_count} plugins")
 

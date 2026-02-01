@@ -158,10 +158,7 @@ class WikipediaPlugin(HTTPPluginBase):
 
         title = result.get("title", "Unknown")
         extract = result.get("extract", "No content available.")
-
-        # Truncate if needed
-        if len(extract) > self._max_summary_length:
-            extract = extract[: self._max_summary_length - 3] + "..."
+        extract = self._truncate(extract, self._max_summary_length)
 
         return PluginResponse(
             message=f"{title}\n\n{extract}",
@@ -189,10 +186,7 @@ class WikipediaPlugin(HTTPPluginBase):
 
         display_title = result.get("title", title)
         extract = result.get("extract", "No content available.")
-
-        # Truncate if needed
-        if len(extract) > self._max_summary_length:
-            extract = extract[: self._max_summary_length - 3] + "..."
+        extract = self._truncate(extract, self._max_summary_length)
 
         return PluginResponse(
             message=f"{display_title}\n\n{extract}",

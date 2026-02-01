@@ -3,44 +3,12 @@
 import logging
 from typing import Any
 
+from meshgate.constants import WMO_WEATHER_CODES
 from meshgate.interfaces.node_context import NodeContext
 from meshgate.interfaces.plugin import PluginMetadata, PluginResponse
 from meshgate.plugins.base import HTTPPluginBase
 
 logger = logging.getLogger(__name__)
-
-
-# WMO Weather interpretation codes
-WMO_CODES = {
-    0: "Clear",
-    1: "Mainly clear",
-    2: "Partly cloudy",
-    3: "Overcast",
-    45: "Foggy",
-    48: "Depositing rime fog",
-    51: "Light drizzle",
-    53: "Moderate drizzle",
-    55: "Dense drizzle",
-    56: "Light freezing drizzle",
-    57: "Dense freezing drizzle",
-    61: "Slight rain",
-    63: "Moderate rain",
-    65: "Heavy rain",
-    66: "Light freezing rain",
-    67: "Heavy freezing rain",
-    71: "Slight snow",
-    73: "Moderate snow",
-    75: "Heavy snow",
-    77: "Snow grains",
-    80: "Slight rain showers",
-    81: "Moderate rain showers",
-    82: "Violent rain showers",
-    85: "Slight snow showers",
-    86: "Heavy snow showers",
-    95: "Thunderstorm",
-    96: "Thunderstorm with slight hail",
-    99: "Thunderstorm with heavy hail",
-}
 
 
 class WeatherPlugin(HTTPPluginBase):
@@ -145,7 +113,7 @@ class WeatherPlugin(HTTPPluginBase):
         wind_speed = current.get("wind_speed_10m", "?")
         wind_dir = current.get("wind_direction_10m", 0)
 
-        condition = WMO_CODES.get(weather_code, "Unknown")
+        condition = WMO_WEATHER_CODES.get(weather_code, "Unknown")
         wind_cardinal = self._degrees_to_cardinal(wind_dir)
 
         weather_text = (
@@ -198,7 +166,7 @@ class WeatherPlugin(HTTPPluginBase):
             except Exception:
                 day_name = date
 
-            condition = WMO_CODES.get(codes[i] if i < len(codes) else 0, "?")
+            condition = WMO_WEATHER_CODES.get(codes[i] if i < len(codes) else 0, "?")
             high = highs[i] if i < len(highs) else "?"
             low = lows[i] if i < len(lows) else "?"
 

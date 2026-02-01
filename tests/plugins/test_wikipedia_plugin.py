@@ -20,14 +20,6 @@ class TestWikipediaPlugin:
             timeout=5.0,
         )
 
-    def test_metadata(self, plugin: WikipediaPlugin) -> None:
-        """Test plugin metadata."""
-        meta = plugin.metadata
-        assert meta.name == "Wikipedia"
-        assert meta.menu_number == 4
-        assert "!search" in meta.commands
-        assert "!random" in meta.commands
-
     def test_welcome_message(self, plugin: WikipediaPlugin) -> None:
         """Test welcome message."""
         welcome = plugin.get_welcome_message()
@@ -178,19 +170,6 @@ class TestWikipediaPlugin:
         assert "..." in response.message
 
     @pytest.mark.asyncio
-    @respx.mock
-    async def test_connection_error(self, plugin: WikipediaPlugin, context: NodeContext) -> None:
-        """Test handling connection error."""
-        respx.get("https://en.wikipedia.org/w/api.php").mock(
-            side_effect=Exception("Connection refused")
-        )
-
-        response = await plugin.handle("test", context, {})
-
-        # Should return error message, not crash
-        assert "error" in response.message.lower() or "connect" in response.message.lower()
-
-    @pytest.mark.asyncio
     async def test_empty_search_query(self, plugin: WikipediaPlugin, context: NodeContext) -> None:
         """Test empty search query."""
         response = await plugin.handle("!search ", context, {})
@@ -205,19 +184,6 @@ class TestWikipediaPlugin:
         response = await plugin.handle("", context, {})
 
         assert "Send a topic" in response.message
-
-    @pytest.mark.asyncio
-    @respx.mock
-    async def test_http_500_error(self, plugin: WikipediaPlugin, context: NodeContext) -> None:
-        """Test handling of HTTP 500 server error."""
-        respx.get("https://en.wikipedia.org/w/api.php").mock(
-            return_value=Response(500, text="Internal Server Error")
-        )
-
-        response = await plugin.handle("test query", context, {})
-
-        # Should return error message, not crash
-        assert response.message
 
     @pytest.mark.asyncio
     @respx.mock

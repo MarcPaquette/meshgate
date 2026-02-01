@@ -32,14 +32,6 @@ class TestGopherPlugin:
         """Create a GopherPlugin with temp directory."""
         return GopherPlugin(root_directory=str(temp_gopher_dir))
 
-    def test_metadata(self, plugin: GopherPlugin) -> None:
-        """Test plugin metadata."""
-        meta = plugin.metadata
-        assert meta.name == "Gopher Server"
-        assert meta.menu_number == 1
-        assert "!back" in meta.commands
-        assert "!home" in meta.commands
-
     def test_welcome_message(self, plugin: GopherPlugin) -> None:
         """Test welcome message shows directory listing."""
         welcome = plugin.get_welcome_message()

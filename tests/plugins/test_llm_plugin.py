@@ -21,14 +21,6 @@ class TestLLMPlugin:
             timeout=5.0,
         )
 
-    def test_metadata(self, plugin: LLMPlugin) -> None:
-        """Test plugin metadata."""
-        meta = plugin.metadata
-        assert meta.name == "LLM Assistant"
-        assert meta.menu_number == 2
-        assert "!model" in meta.commands
-        assert "!clear" in meta.commands
-
     def test_welcome_message(self, plugin: LLMPlugin) -> None:
         """Test welcome message shows model name."""
         welcome = plugin.get_welcome_message()
@@ -145,19 +137,6 @@ class TestLLMPlugin:
 
         assert len(response.message) <= 400
         assert response.message.endswith("...")
-
-    @pytest.mark.asyncio
-    @respx.mock
-    async def test_connection_error(self, plugin: LLMPlugin, context: NodeContext) -> None:
-        """Test handling connection error."""
-        respx.post("http://localhost:11434/api/chat").mock(
-            side_effect=Exception("Connection refused")
-        )
-
-        response = await plugin.handle("Hello", context, {"model": "test-model", "history": []})
-
-        # Should return error message, not crash
-        assert "error" in response.message.lower() or "connect" in response.message.lower()
 
     @pytest.mark.asyncio
     @respx.mock

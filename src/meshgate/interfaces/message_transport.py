@@ -1,7 +1,7 @@
 """Message transport interface - Abstract base class for transport implementations."""
 
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Callable, Coroutine
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
 from meshgate.interfaces.node_context import NodeContext
@@ -18,10 +18,6 @@ class IncomingMessage:
 
     text: str
     context: NodeContext
-
-
-# Type alias for message handlers
-MessageHandler = Callable[[IncomingMessage], Coroutine[None, None, None]]
 
 
 class MessageTransport(ABC):
@@ -53,14 +49,6 @@ class MessageTransport(ABC):
 
         Returns:
             True if message was sent successfully, False otherwise
-        """
-
-    @abstractmethod
-    def set_message_handler(self, handler: MessageHandler) -> None:
-        """Set the callback for handling incoming messages.
-
-        Args:
-            handler: Async function to call when a message is received
         """
 
     @abstractmethod
