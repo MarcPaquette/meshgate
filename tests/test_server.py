@@ -1,6 +1,7 @@
 """Tests for HandlerServer."""
 
 import asyncio
+from pathlib import Path
 
 import pytest
 
@@ -8,6 +9,40 @@ from meshgate.config import Config
 from meshgate.server import HandlerServer
 from tests.conftest import running_server
 from tests.mocks import MockTransport
+
+# Sample external plugin code for testing
+SAMPLE_PLUGIN_CODE = '''
+"""Sample external plugin for testing."""
+
+from typing import Any
+
+from meshgate.interfaces.plugin import Plugin, PluginMetadata, PluginResponse
+from meshgate.interfaces.node_context import NodeContext
+
+
+class SampleExternalPlugin(Plugin):
+    """A sample external plugin for testing automatic loading."""
+
+    @property
+    def metadata(self) -> PluginMetadata:
+        return PluginMetadata(
+            name="Sample External",
+            description="A sample external plugin",
+            menu_number={menu_number},
+            commands=("!sample",),
+        )
+
+    def get_welcome_message(self) -> str:
+        return "Welcome to the sample external plugin!"
+
+    def get_help_text(self) -> str:
+        return "This is a sample external plugin for testing."
+
+    async def handle(
+        self, message: str, context: NodeContext, plugin_state: dict[str, Any]
+    ) -> PluginResponse:
+        return PluginResponse(message=f"Sample response: {{message}}")
+'''
 
 
 class TestHandlerServer:
@@ -307,3 +342,178 @@ class TestHandlerServerRateLimiting:
         messages = [msg for _, msg in mock_transport.sent_messages]
         rate_limit_msgs = [m for m in messages if "Rate limited" in m]
         assert len(rate_limit_msgs) == 0
+
+
+class TestHandlerServerExternalPlugins:
+    """Tests for external plugin loading functionality."""
+
+    @pytest.fixture
+    def plugin_dir(self, tmp_path: Path) -> Path:
+        """Create a temporary directory for external plugins."""
+        plugins_dir = tmp_path / "external_plugins"
+        plugins_dir.mkdir()
+        return plugins_dir
+
+    def test_loads_external_plugins_from_configured_path(
+        self, mock_transport: MockTransport, plugin_dir: Path
+    ) -> None:
+        """Test that external plugins are loaded from configured paths."""
+        # Create a sample plugin file with menu number 10 (won't conflict with built-ins 1-4)
+        plugin_file = plugin_dir / "sample_plugin.py"
+        plugin_file.write_text(SAMPLE_PLUGIN_CODE.format(menu_number=10))
+
+        config = Config.default()
+        config.plugin_paths = [str(plugin_dir)]
+        server = HandlerServer(config=config, transport=mock_transport)
+
+        # Should have 4 built-in + 1 external = 5 plugins
+        assert server.registry.plugin_count == 5
+
+        # The external plugin should be registered
+        plugin = server.registry.get_by_name("Sample External")
+        assert plugin is not None
+        assert plugin.metadata.menu_number == 10
+
+    def test_external_plugin_accessible_via_menu(
+        self, mock_transport: MockTransport, plugin_dir: Path
+    ) -> None:
+        """Test that external plugins can be accessed via menu selection."""
+        plugin_file = plugin_dir / "sample_plugin.py"
+        plugin_file.write_text(SAMPLE_PLUGIN_CODE.format(menu_number=10))
+
+        config = Config.default()
+        config.plugin_paths = [str(plugin_dir)]
+        server = HandlerServer(config=config, transport=mock_transport)
+
+        # External plugin should be accessible by menu number
+        plugin = server.registry.get_by_menu_number(10)
+        assert plugin is not None
+        assert plugin.metadata.name == "Sample External"
+
+    def test_handles_nonexistent_plugin_directory(
+        self, mock_transport: MockTransport, tmp_path: Path
+    ) -> None:
+        """Test that nonexistent plugin directories are handled gracefully."""
+        nonexistent_path = tmp_path / "does_not_exist"
+
+        config = Config.default()
+        config.plugin_paths = [str(nonexistent_path)]
+
+        # Should not raise, just log warning
+        server = HandlerServer(config=config, transport=mock_transport)
+
+        # Should still have built-in plugins
+        assert server.registry.plugin_count == 4
+
+    def test_handles_empty_plugin_directory(
+        self, mock_transport: MockTransport, plugin_dir: Path
+    ) -> None:
+        """Test that empty plugin directories are handled gracefully."""
+        config = Config.default()
+        config.plugin_paths = [str(plugin_dir)]  # Empty directory
+
+        server = HandlerServer(config=config, transport=mock_transport)
+
+        # Should still have built-in plugins only
+        assert server.registry.plugin_count == 4
+
+    def test_skips_plugins_with_conflicting_menu_number(
+        self, mock_transport: MockTransport, plugin_dir: Path
+    ) -> None:
+        """Test that plugins with conflicting menu numbers are skipped."""
+        # Create a plugin with menu number 1 (conflicts with Gopher)
+        plugin_file = plugin_dir / "conflicting_plugin.py"
+        plugin_file.write_text(SAMPLE_PLUGIN_CODE.format(menu_number=1))
+
+        config = Config.default()
+        config.plugin_paths = [str(plugin_dir)]
+
+        # Should not raise, just log warning about conflict
+        server = HandlerServer(config=config, transport=mock_transport)
+
+        # Should still have only 4 plugins (external one was skipped)
+        assert server.registry.plugin_count == 4
+
+        # Built-in Gopher should still be at menu 1
+        plugin = server.registry.get_by_menu_number(1)
+        assert plugin is not None
+        assert plugin.metadata.name == "Gopher Server"
+
+    def test_loads_multiple_external_plugins(
+        self, mock_transport: MockTransport, plugin_dir: Path
+    ) -> None:
+        """Test that multiple external plugins can be loaded."""
+        # Create two external plugins
+        plugin1 = plugin_dir / "plugin_one.py"
+        plugin1.write_text(SAMPLE_PLUGIN_CODE.format(menu_number=10))
+
+        plugin2_code = SAMPLE_PLUGIN_CODE.replace("Sample External", "Another Plugin")
+        plugin2 = plugin_dir / "plugin_two.py"
+        plugin2.write_text(plugin2_code.format(menu_number=11))
+
+        config = Config.default()
+        config.plugin_paths = [str(plugin_dir)]
+        server = HandlerServer(config=config, transport=mock_transport)
+
+        # Should have 4 built-in + 2 external = 6 plugins
+        assert server.registry.plugin_count == 6
+
+    def test_loads_from_multiple_plugin_paths(
+        self, mock_transport: MockTransport, tmp_path: Path
+    ) -> None:
+        """Test that plugins are loaded from multiple configured paths."""
+        dir1 = tmp_path / "plugins1"
+        dir1.mkdir()
+        dir2 = tmp_path / "plugins2"
+        dir2.mkdir()
+
+        # Plugin in first directory
+        plugin1 = dir1 / "plugin_a.py"
+        plugin1.write_text(SAMPLE_PLUGIN_CODE.format(menu_number=10))
+
+        # Plugin in second directory
+        plugin2_code = SAMPLE_PLUGIN_CODE.replace("Sample External", "Second Plugin")
+        plugin2 = dir2 / "plugin_b.py"
+        plugin2.write_text(plugin2_code.format(menu_number=11))
+
+        config = Config.default()
+        config.plugin_paths = [str(dir1), str(dir2)]
+        server = HandlerServer(config=config, transport=mock_transport)
+
+        # Should have 4 built-in + 2 external = 6 plugins
+        assert server.registry.plugin_count == 6
+
+    def test_empty_plugin_paths_config(
+        self, mock_transport: MockTransport
+    ) -> None:
+        """Test that empty plugin_paths config is handled."""
+        config = Config.default()
+        config.plugin_paths = []  # No external plugin paths
+
+        server = HandlerServer(config=config, transport=mock_transport)
+
+        # Should still have built-in plugins
+        assert server.registry.plugin_count == 4
+
+    def test_skips_private_python_files(
+        self, mock_transport: MockTransport, plugin_dir: Path
+    ) -> None:
+        """Test that files starting with underscore are skipped."""
+        # Create a private file (should be skipped)
+        private_file = plugin_dir / "_private_plugin.py"
+        private_file.write_text(SAMPLE_PLUGIN_CODE.format(menu_number=10))
+
+        # Create a regular plugin
+        regular_file = plugin_dir / "regular_plugin.py"
+        regular_file.write_text(SAMPLE_PLUGIN_CODE.format(menu_number=11))
+
+        config = Config.default()
+        config.plugin_paths = [str(plugin_dir)]
+        server = HandlerServer(config=config, transport=mock_transport)
+
+        # Should have 4 built-in + 1 regular (private skipped) = 5 plugins
+        assert server.registry.plugin_count == 5
+
+        # Only menu 11 should exist, not menu 10
+        assert server.registry.get_by_menu_number(10) is None
+        assert server.registry.get_by_menu_number(11) is not None

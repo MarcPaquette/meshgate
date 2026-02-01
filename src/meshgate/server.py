@@ -8,6 +8,7 @@ from meshgate.config import Config
 from meshgate.core.content_chunker import ContentChunker
 from meshgate.core.message_router import MessageRouter
 from meshgate.core.node_filter import NodeFilter
+from meshgate.core.plugin_loader import PluginLoader
 from meshgate.core.plugin_registry import PluginRegistry
 from meshgate.core.rate_limiter import RateLimiter
 from meshgate.core.session_manager import SessionManager
@@ -54,6 +55,7 @@ class HandlerServer:
         self._setup_security()
         self._setup_transport(transport)
         self._register_builtin_plugins()
+        self._load_external_plugins()
 
     def _setup_components(self) -> None:
         """Initialize core server components."""
@@ -115,7 +117,42 @@ class HandlerServer:
         self._registry.register(WeatherPlugin(**asdict(plugins_cfg.weather)))
         self._registry.register(WikipediaPlugin(**asdict(plugins_cfg.wikipedia)))
 
-        logger.info(f"Registered {self._registry.plugin_count} plugins")
+        logger.info(f"Registered {self._registry.plugin_count} built-in plugins")
+
+    def _load_external_plugins(self) -> None:
+        """Load and register external plugins from configured paths.
+
+        Scans each directory in config.plugin_paths for Python files containing
+        Plugin subclasses. Plugins are automatically instantiated and registered.
+
+        Errors during loading are logged but don't stop the server.
+        """
+        if not self._config.plugin_paths:
+            return
+
+        loader = PluginLoader()
+        loaded_count = 0
+
+        for path in self._config.plugin_paths:
+            plugins = loader.discover_plugins(path)
+
+            for plugin in plugins:
+                try:
+                    self._registry.register(plugin)
+                    loaded_count += 1
+                    logger.info(
+                        f"Registered external plugin '{plugin.metadata.name}' "
+                        f"(menu #{plugin.metadata.menu_number})"
+                    )
+                except ValueError as e:
+                    # Registration failed (duplicate name or menu number)
+                    logger.warning(
+                        f"Failed to register plugin '{plugin.metadata.name}': {e}"
+                    )
+
+        if loaded_count > 0:
+            logger.info(f"Loaded {loaded_count} external plugins")
+            logger.info(f"Total plugins: {self._registry.plugin_count}")
 
     async def start(self) -> None:
         """Start the server and begin handling messages."""
