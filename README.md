@@ -314,6 +314,8 @@ class MyAPIPlugin(HTTPPluginBase):
 
 #### Dynamic Plugin Loading
 
+**Security Warning**: External plugins execute arbitrary Python code with full system access. This feature is disabled by default. Only enable for trusted plugins.
+
 Load plugins dynamically from modules or files:
 
 ```python

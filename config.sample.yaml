@@ -45,6 +45,8 @@ security:
   rate_limit_messages: 10        # Max messages per window
   rate_limit_window_seconds: 60  # Sliding window size in seconds
 
-# Directories to scan for external plugins
-plugin_paths:
-  - ./external_plugins
+# External plugin loading (DISABLED by default for security)
+# WARNING: Plugins execute arbitrary Python with full system access.
+# Only enable if you trust the plugin source.
+# plugin_paths:
+#   - ./external_plugins

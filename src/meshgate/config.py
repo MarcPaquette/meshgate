@@ -146,7 +146,7 @@ class Config:
     meshtastic: MeshtasticConfig = field(default_factory=MeshtasticConfig)
     plugins: PluginsConfig = field(default_factory=PluginsConfig)
     security: SecurityConfig = field(default_factory=SecurityConfig)
-    plugin_paths: list[str] = field(default_factory=lambda: ["./external_plugins"])
+    plugin_paths: list[str] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Config":
@@ -172,7 +172,7 @@ class Config:
             meshtastic=_dataclass_from_dict(MeshtasticConfig, data.get("meshtastic", {})),
             plugins=plugins,
             security=_dataclass_from_dict(SecurityConfig, data.get("security", {})),
-            plugin_paths=data.get("plugin_paths", ["./external_plugins"]),
+            plugin_paths=data.get("plugin_paths", []),
         )
 
     @classmethod

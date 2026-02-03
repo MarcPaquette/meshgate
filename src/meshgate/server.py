@@ -133,6 +133,13 @@ class HandlerServer:
         if not self._config.plugin_paths:
             return
 
+        logger.warning(
+            "SECURITY: External plugin loading enabled. "
+            "Plugins execute arbitrary code with full system access. "
+            "Paths: %s",
+            self._config.plugin_paths,
+        )
+
         loader = PluginLoader()
         loaded_count = 0
 

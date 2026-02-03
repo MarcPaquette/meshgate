@@ -354,6 +354,13 @@ class TestHandlerServerExternalPlugins:
         plugins_dir.mkdir()
         return plugins_dir
 
+    def test_default_config_disables_external_plugins(
+        self, mock_transport: MockTransport
+    ) -> None:
+        """Default config should not load external plugins."""
+        config = Config.default()
+        assert config.plugin_paths == []
+
     def test_loads_external_plugins_from_configured_path(
         self, mock_transport: MockTransport, plugin_dir: Path
     ) -> None:
