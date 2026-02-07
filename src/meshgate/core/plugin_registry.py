@@ -86,14 +86,6 @@ class PluginRegistry:
         """
         return sorted(self._plugins.values(), key=lambda p: p.metadata.menu_number)
 
-    def get_menu_numbers(self) -> list[int]:
-        """Get all registered menu numbers, sorted.
-
-        Returns:
-            Sorted list of menu numbers
-        """
-        return sorted(self._menu_index.keys())
-
     @property
     def plugin_count(self) -> int:
         """Get the number of registered plugins."""

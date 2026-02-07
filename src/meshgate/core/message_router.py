@@ -69,7 +69,7 @@ class MessageRouter:
             return self._handle_exit(session)
 
         if message.lower() == self.MENU_COMMAND:
-            return self._handle_menu()
+            return PluginResponse(message=self._render_menu())
 
         # At main menu - handle menu selection
         if session.is_at_menu:
@@ -89,14 +89,6 @@ class MessageRouter:
         """
         session.exit_plugin()
         return PluginResponse(message=f"Returned to menu.\n\n{self._render_menu()}")
-
-    def _handle_menu(self) -> PluginResponse:
-        """Handle the !menu command.
-
-        Returns:
-            PluginResponse with menu
-        """
-        return PluginResponse(message=self._render_menu())
 
     async def _handle_menu_selection(self, message: str, session: Session) -> PluginResponse:
         """Handle menu number selection.

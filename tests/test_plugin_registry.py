@@ -87,14 +87,6 @@ class TestPluginRegistry:
         assert plugins[1].metadata.menu_number == 2
         assert plugins[2].metadata.menu_number == 3
 
-    def test_get_menu_numbers(self, plugin_registry: PluginRegistry) -> None:
-        """Test getting sorted list of menu numbers."""
-        plugin_registry.register(MockPlugin(name="P3", menu_number=3))
-        plugin_registry.register(MockPlugin(name="P1", menu_number=1))
-
-        numbers = plugin_registry.get_menu_numbers()
-        assert numbers == [1, 3]
-
     def test_unregister(self, plugin_registry: PluginRegistry) -> None:
         """Test unregistering a plugin."""
         plugin = MockPlugin(name="Test", menu_number=1)

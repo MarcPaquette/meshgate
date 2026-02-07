@@ -46,8 +46,8 @@ class TestHTTPPluginBase:
         """Create a concrete HTTP plugin."""
         return ConcreteHTTPPlugin(timeout=5.0)
 
-    def test_timeout_property(self, plugin: ConcreteHTTPPlugin) -> None:
-        """Test timeout property."""
+    def test_timeout_attribute(self, plugin: ConcreteHTTPPlugin) -> None:
+        """Test timeout attribute."""
         assert plugin.timeout == 5.0
 
     def test_default_timeout(self) -> None:
@@ -55,8 +55,8 @@ class TestHTTPPluginBase:
         plugin = ConcreteHTTPPlugin()
         assert plugin.timeout == 5.0
 
-    def test_service_name_property(self, plugin: ConcreteHTTPPlugin) -> None:
-        """Test service_name property."""
+    def test_service_name_attribute(self, plugin: ConcreteHTTPPlugin) -> None:
+        """Test service_name attribute."""
         assert plugin.service_name == "Test Service"
 
     def test_create_client(self, plugin: ConcreteHTTPPlugin) -> None:
@@ -172,39 +172,27 @@ class TestHTTPPluginBase:
         assert isinstance(result, PluginResponse)
         assert "400" in result.message
 
-    def test_error_response(self, plugin: ConcreteHTTPPlugin) -> None:
-        """Test _error_response helper."""
-        response = plugin._error_response("Something went wrong")
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_request_json_get(self, plugin: ConcreteHTTPPlugin) -> None:
+        """Test _request_json with GET method."""
+        respx.get("https://example.com/api").mock(return_value=Response(200, json={"ok": True}))
 
-        assert response.message == "Something went wrong"
-        assert response.plugin_state is None
+        result = await plugin._request_json("get", "https://example.com/api")
 
-    def test_error_response_with_state(self, plugin: ConcreteHTTPPlugin) -> None:
-        """Test _error_response with preserved state."""
-        response = plugin._error_response("Error", plugin_state={"key": "value"})
+        assert isinstance(result, dict)
+        assert result["ok"] is True
 
-        assert response.message == "Error"
-        assert response.plugin_state == {"key": "value"}
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_request_json_post(self, plugin: ConcreteHTTPPlugin) -> None:
+        """Test _request_json with POST method."""
+        respx.post("https://example.com/api").mock(return_value=Response(200, json={"ok": True}))
 
-    def test_success_response(self, plugin: ConcreteHTTPPlugin) -> None:
-        """Test _success_response helper."""
-        response = plugin._success_response("All good")
+        result = await plugin._request_json("post", "https://example.com/api", json={"data": 1})
 
-        assert response.message == "All good"
-        assert response.plugin_state is None
-        assert response.exit_plugin is False
-
-    def test_success_response_with_exit(self, plugin: ConcreteHTTPPlugin) -> None:
-        """Test _success_response with exit flag."""
-        response = plugin._success_response(
-            "Done",
-            plugin_state={"final": True},
-            exit_plugin=True,
-        )
-
-        assert response.message == "Done"
-        assert response.plugin_state == {"final": True}
-        assert response.exit_plugin is True
+        assert isinstance(result, dict)
+        assert result["ok"] is True
 
     def test_truncate_within_limit(self, plugin: ConcreteHTTPPlugin) -> None:
         """Test _truncate when text is within limit."""

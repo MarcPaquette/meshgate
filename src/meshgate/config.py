@@ -1,6 +1,6 @@
 """Configuration loading from YAML files."""
 
-from dataclasses import dataclass, field, fields
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -10,49 +10,9 @@ T = TypeVar("T")
 
 
 def _dataclass_from_dict(cls: type[T], data: dict[str, Any]) -> T:
-    """Create a dataclass instance from a dictionary.
-
-    Uses dataclass field introspection to automatically map dict keys to fields,
-    using field defaults when keys are missing.
-
-    Args:
-        cls: The dataclass type to instantiate
-        data: Dictionary with field values
-
-    Returns:
-        Instance of the dataclass with values from dict (or defaults)
-    """
-    kwargs = {}
-    for f in fields(cls):
-        if f.name in data:
-            kwargs[f.name] = data[f.name]
-        # If not in data, dataclass will use its own default
-    return cls(**kwargs)
-
-
-def _dataclass_to_dict(obj: Any) -> dict[str, Any]:
-    """Convert a dataclass instance to a dictionary.
-
-    Recursively handles nested dataclasses.
-
-    Args:
-        obj: Dataclass instance to convert
-
-    Returns:
-        Dictionary representation of the dataclass
-    """
-    result = {}
-    for f in fields(obj):
-        value = getattr(obj, f.name)
-        # Check if value is itself a dataclass (has __dataclass_fields__)
-        if hasattr(value, "__dataclass_fields__"):
-            result[f.name] = _dataclass_to_dict(value)
-        elif isinstance(value, list):
-            # Handle lists (e.g., plugin_paths, allowlist)
-            result[f.name] = value.copy() if value else []
-        else:
-            result[f.name] = value
-    return result
+    """Create a dataclass instance from a dictionary, ignoring unknown keys."""
+    valid = {f.name for f in fields(cls)}
+    return cls(**{k: v for k, v in data.items() if k in valid})
 
 
 @dataclass
@@ -209,7 +169,7 @@ class Config:
         Returns:
             Configuration as dictionary
         """
-        return _dataclass_to_dict(self)
+        return asdict(self)
 
     def save_yaml(self, path: str | Path) -> None:
         """Save configuration to YAML file.
