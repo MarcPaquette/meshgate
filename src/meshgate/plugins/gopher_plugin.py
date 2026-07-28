@@ -1,10 +1,14 @@
 """Gopher plugin - Directory-based content navigation."""
 
+import logging
+import os
 from pathlib import Path
 from typing import Any
 
 from meshgate.interfaces.node_context import NodeContext
 from meshgate.interfaces.plugin import Plugin, PluginMetadata, PluginResponse
+
+logger = logging.getLogger(__name__)
 
 
 class GopherPlugin(Plugin):
@@ -107,15 +111,25 @@ class GopherPlugin(Plugin):
         items = self._get_items(current)
 
         if selection < 1 or selection > len(items):
-            listing = self._list_directory(current)
+            # Reuse the entries already read rather than scanning again.
+            listing = self._render_listing(current, items)
             return self._path_response(
                 f"Invalid selection. Choose 1-{len(items)}.\n\n{listing}", current
             )
 
-        selected = items[selection - 1]
+        selected, is_dir = items[selection - 1]
         selected_path = current / selected
 
-        if selected_path.is_dir():
+        # Entries are listed straight from the directory, so a symlink pointing
+        # outside the root would otherwise be served before the containment
+        # check on the following request ever ran.
+        if not self._is_within_root(selected_path):
+            logger.warning("Blocked access outside gopher root: %s", selected_path)
+            return self._path_response(
+                f"Access denied.\n\n{self._render_listing(current, items)}", current
+            )
+
+        if is_dir:
             # Navigate into directory
             return self._path_response(self._list_directory(selected_path), selected_path)
         # Read file content
@@ -134,35 +148,45 @@ class GopherPlugin(Plugin):
         except ValueError:
             return False
 
-    def _get_items(self, directory: Path) -> list[str]:
-        """Get sorted list of items in directory."""
+    def _get_items(self, directory: Path) -> list[tuple[str, bool]]:
+        """Get sorted directory entries as (name, is_dir) pairs.
+
+        Uses os.scandir so the directory type comes from the dirent that the
+        scan already returned, rather than a separate stat() per entry.
+        """
         if not directory.is_dir():
             return []
 
         items = []
         try:
-            for entry in sorted(directory.iterdir()):
-                # Skip hidden files
-                if entry.name.startswith("."):
-                    continue
-                items.append(entry.name)
-        except PermissionError:
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    # Skip hidden files
+                    if entry.name.startswith("."):
+                        continue
+                    try:
+                        is_dir = entry.is_dir()
+                    except OSError:
+                        is_dir = False
+                    items.append((entry.name, is_dir))
+        except (PermissionError, OSError):
             pass
-        return items
+        return sorted(items)
 
     def _list_directory(self, directory: Path) -> str:
         """Generate directory listing."""
-        items = self._get_items(directory)
+        return self._render_listing(directory, self._get_items(directory))
 
+    def _render_listing(self, directory: Path, items: list[tuple[str, bool]]) -> str:
+        """Render a listing from entries already read, avoiding a re-scan."""
         if not items:
             rel_path = self._get_relative_path(directory)
             return f"[{rel_path}]\n(empty)"
 
         lines = [f"[{self._get_relative_path(directory)}]"]
-        for i, item in enumerate(items, 1):
-            item_path = directory / item
-            suffix = "/" if item_path.is_dir() else ""
-            lines.append(f"{i}. {item}{suffix}")
+        for i, (name, is_dir) in enumerate(items, 1):
+            suffix = "/" if is_dir else ""
+            lines.append(f"{i}. {name}{suffix}")
 
         return "\n".join(lines)
 
@@ -179,9 +203,14 @@ class GopherPlugin(Plugin):
         if max_chars is None:
             max_chars = self.MAX_FILE_CHARS
         try:
-            content = file_path.read_text(encoding="utf-8", errors="replace")
+            # Read only what is needed, plus one character to detect overflow.
+            # read_text() would pull an arbitrarily large file fully into
+            # memory just to discard all but the first few hundred characters.
+            with open(file_path, encoding="utf-8", errors="replace") as f:
+                content = f.read(max_chars + 1)
             if len(content) > max_chars:
                 content = content[:max_chars] + "...[truncated]"
             return content.strip()
         except Exception as e:
-            return f"Error reading file: {e}"
+            logger.warning("Error reading %s: %s", file_path, e)
+            return "Error reading file."

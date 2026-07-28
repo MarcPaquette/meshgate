@@ -38,6 +38,25 @@ IncomingMessage → HandlerServer → MessageRouter → Plugin.handle()
 - Accepts custom `MessageTransport` for testing (inject `MockTransport`)
 - Use `handle_single_message()` for testing without transport
 
+### Concurrency Model
+
+Messages are handled **concurrently across nodes but serialized per node**, so a
+slow plugin call (e.g. a 30s LLM request) cannot stall the rest of the mesh:
+
+- `_dispatch()` spawns a task per message, tracked in `_inflight` (strong refs —
+  asyncio only holds weak ones)
+- A global `asyncio.Semaphore` caps total in-flight handlers
+- A per-node `asyncio.Lock` keeps one node's messages ordered. **This is
+  required**: `Session` is a mutable dataclass with no locking, so overlapping
+  messages from one node would corrupt `plugin_state`
+- `stop()` waits `SHUTDOWN_GRACE_SECONDS` for in-flight work before cancelling,
+  so multi-chunk replies aren't truncated
+
+`MeshtasticTransport._on_receive` runs on **meshtastic's publishing thread**, not
+the event loop. `asyncio.Queue` is not thread-safe, so it hands messages over via
+`loop.call_soon_threadsafe()`. Radio sends use a dedicated single-thread executor
+so concurrent handlers can't interleave writes on the serial stream.
+
 **MessageRouter** (`core/message_router.py`) - Routes messages based on session state:
 - At menu: number → enters plugin, shows welcome
 - In plugin: message → `plugin.handle()`

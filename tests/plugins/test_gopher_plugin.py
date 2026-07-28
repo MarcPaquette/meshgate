@@ -155,3 +155,105 @@ class TestGopherPlugin:
             response = await empty_plugin.handle("!home", context, {})
 
             assert "(empty)" in response.message
+
+
+class TestRootContainment:
+    """Selections are indexes into the directory listing, which includes
+    symlinks, so containment must be checked before serving them."""
+
+    @pytest.fixture
+    def rooted(self, tmp_path):
+        """A gopher root containing a symlink that escapes it."""
+        root = tmp_path / "content"
+        root.mkdir()
+        (root / "inside.txt").write_text("safe content")
+
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (outside / "secret.txt").write_text("SECRET")
+
+        (root / "escape.txt").symlink_to(outside / "secret.txt")
+        (root / "escape_dir").symlink_to(outside)
+
+        return GopherPlugin(root_directory=str(root))
+
+    @pytest.mark.asyncio
+    async def test_symlinked_file_is_not_read(
+        self, rooted: GopherPlugin, context: NodeContext
+    ) -> None:
+        """Regression: the escaping file was served before the check ran."""
+        listing = await rooted.handle("!home", context, {})
+        items = [
+            line.split(". ", 1)[1]
+            for line in listing.message.splitlines()
+            if ". " in line
+        ]
+        index = items.index("escape.txt") + 1
+
+        response = await rooted.handle(str(index), context, listing.plugin_state)
+
+        assert "SECRET" not in response.message
+        assert "Access denied" in response.message
+
+    @pytest.mark.asyncio
+    async def test_symlinked_directory_is_not_entered(
+        self, rooted: GopherPlugin, context: NodeContext
+    ) -> None:
+        listing = await rooted.handle("!home", context, {})
+        items = [
+            line.split(". ", 1)[1].rstrip("/")
+            for line in listing.message.splitlines()
+            if ". " in line
+        ]
+        index = items.index("escape_dir") + 1
+
+        response = await rooted.handle(str(index), context, listing.plugin_state)
+
+        assert "secret.txt" not in response.message
+        assert "Access denied" in response.message
+
+    @pytest.mark.asyncio
+    async def test_normal_file_still_readable(
+        self, rooted: GopherPlugin, context: NodeContext
+    ) -> None:
+        """The containment check must not block legitimate content."""
+        listing = await rooted.handle("!home", context, {})
+        items = [
+            line.split(". ", 1)[1]
+            for line in listing.message.splitlines()
+            if ". " in line
+        ]
+        index = items.index("inside.txt") + 1
+
+        response = await rooted.handle(str(index), context, listing.plugin_state)
+
+        assert "safe content" in response.message
+
+
+class TestBoundedFileRead:
+    """Files are read up to the limit, not loaded whole and then trimmed."""
+
+    @pytest.mark.asyncio
+    async def test_large_file_is_truncated(self, context: NodeContext, tmp_path) -> None:
+        root = tmp_path / "content"
+        root.mkdir()
+        (root / "big.txt").write_text("A" * 100_000)
+        plugin = GopherPlugin(root_directory=str(root))
+
+        listing = await plugin.handle("!home", context, {})
+        response = await plugin.handle("1", context, listing.plugin_state)
+
+        assert "[truncated]" in response.message
+        assert len(response.message) < 1000
+
+    def test_read_stops_at_the_limit(self, tmp_path) -> None:
+        """Only max_chars+1 characters should be pulled off disk."""
+        path = tmp_path / "big.txt"
+        path.write_text("B" * 50_000)
+        plugin = GopherPlugin(root_directory=str(tmp_path))
+
+        content = plugin._read_file(path, max_chars=100)
+
+        assert content.startswith("B" * 100)
+        assert "[truncated]" in content
+        assert len(content) < 150

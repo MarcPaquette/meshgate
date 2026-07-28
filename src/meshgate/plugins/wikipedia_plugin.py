@@ -2,6 +2,7 @@
 
 import logging
 from typing import Any
+from urllib.parse import quote
 
 from meshgate.interfaces.node_context import NodeContext
 from meshgate.interfaces.plugin import PluginMetadata, PluginResponse
@@ -86,7 +87,7 @@ class WikipediaPlugin(HTTPPluginBase):
             query = message[7:].strip() if len(message) > 7 else ""
             if query:
                 return await self._handle_search(query)
-            return PluginResponse(message="Usage: !search <query>", plugin_state=plugin_state)
+            return PluginResponse(message="Usage: !search <query>")
 
         # Check if there's a last search with numbered results
         last_results = plugin_state.get("last_results", [])
@@ -103,7 +104,7 @@ class WikipediaPlugin(HTTPPluginBase):
         if message:
             return await self._handle_search(message)
 
-        return PluginResponse(message="Send a topic to search.", plugin_state=plugin_state)
+        return PluginResponse(message="Send a topic to search.")
 
     async def _handle_search(self, query: str) -> PluginResponse:
         """Search Wikipedia for articles matching query."""
@@ -162,13 +163,17 @@ class WikipediaPlugin(HTTPPluginBase):
 
         return PluginResponse(
             message=f"{title}\n\n{extract}",
-            plugin_state={"last_title": title},
+            # last_results must be cleared explicitly: session state is merged,
+            # not replaced, so a stale numbered list from an earlier search
+            # would otherwise still capture the user's next numeric message.
+            plugin_state={"last_title": title, "last_results": []},
         )
 
     async def _get_summary(self, title: str) -> PluginResponse:
         """Get summary for a specific article title."""
-        # URL-encode the title
-        encoded_title = title.replace(" ", "_")
+        # safe="" so that /, ?, # and % in titles ("AC/DC", "C#") are escaped
+        # rather than corrupting the request path.
+        encoded_title = quote(title.replace(" ", "_"), safe="")
 
         result = await self._fetch_json(
             f"{self._base_url}/page/summary/{encoded_title}",

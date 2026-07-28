@@ -1,6 +1,6 @@
 """Tests for session management."""
 
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import pytest
 
@@ -179,8 +179,9 @@ class TestSessionManager:
         manager = SessionManager(session_timeout_minutes=1)
         session = manager.get_session("!test123")
 
-        # Manually set last_activity to past
-        session.last_activity = datetime.now() - timedelta(minutes=2)
+        # Expiry runs off the monotonic clock, so wind that back rather than
+        # the wall-clock timestamp.
+        session.last_activity_monotonic -= 120
 
         removed = manager.cleanup_expired_sessions()
 
@@ -230,13 +231,11 @@ class TestSessionManager:
         """Test that eviction is based on last_activity, not creation time."""
         manager = SessionManager(max_sessions=2)
 
-        # Create sessions and manually set activity times
-        session1 = manager.get_session("!node1")
-        session2 = manager.get_session("!node2")
+        manager.get_session("!node1")
+        manager.get_session("!node2")
 
-        # Make node1 more recently active than node2
-        session2.last_activity = datetime.now() - timedelta(hours=1)
-        session1.last_activity = datetime.now()
+        # Touching node1 again makes it the more recently active of the two.
+        manager.get_session("!node1")
 
         # Creating a third session should evict node2 (oldest activity)
         manager.get_session("!node3")
@@ -267,3 +266,48 @@ class TestSessionManager:
 
         assert result is None
         assert manager.active_session_count == 2
+
+
+class TestPluginStateSizeLimit:
+    """The byte cap must reflect actual payload size.
+
+    sys.getsizeof is shallow: for {"history": [...]} it reports the dict plus
+    the list's pointer array and ignores every message, so the cap used to be
+    off by orders of magnitude and effectively never fired.
+    """
+
+    def test_large_history_is_rejected(self) -> None:
+        session = Session(node_id="!node")
+        history = [{"role": "user", "content": "x" * 400} for _ in range(8)]
+
+        # ~3.2 KB of real content; the old shallow measure reported ~304 bytes.
+        assert session.update_plugin_state({"history": history}, max_bytes=1024) is False
+        assert session.plugin_state == {}
+
+    def test_small_state_is_accepted(self) -> None:
+        session = Session(node_id="!node")
+
+        assert session.update_plugin_state({"k": "v"}, max_bytes=1024) is True
+        assert session.plugin_state == {"k": "v"}
+
+    def test_limit_accounts_for_existing_state(self) -> None:
+        """The check applies to the merged result, not just the new keys."""
+        session = Session(node_id="!node")
+        session.update_plugin_state({"a": "x" * 500})
+
+        assert session.update_plugin_state({"b": "y" * 500}, max_bytes=800) is False
+        assert "b" not in session.plugin_state
+
+    def test_zero_means_unlimited(self) -> None:
+        session = Session(node_id="!node")
+        history = [{"role": "user", "content": "x" * 5000} for _ in range(20)]
+
+        assert session.update_plugin_state({"history": history}, max_bytes=0) is True
+
+    def test_unmeasurable_state_is_rejected(self) -> None:
+        """Circular state can't be sized, so it must not slip past the cap."""
+        session = Session(node_id="!node")
+        circular: dict = {}
+        circular["self"] = circular
+
+        assert session.update_plugin_state(circular, max_bytes=1024) is False

@@ -14,6 +14,13 @@ class PluginRegistry:
         """Initialize the plugin registry."""
         self._plugins: dict[str, Plugin] = {}
         self._menu_index: dict[int, str] = {}
+        # Menu number recorded at registration time. plugin.metadata rebuilds a
+        # dataclass on every access, so re-reading it during unregister could
+        # desynchronize the two indexes if it ever changed.
+        self._name_to_menu: dict[str, int] = {}
+        self._sorted_cache: list[Plugin] | None = None
+        # Bumped on every change so dependents can cache derived values.
+        self._version = 0
 
     def register(self, plugin: Plugin) -> None:
         """Register a plugin.
@@ -35,6 +42,8 @@ class PluginRegistry:
 
         self._plugins[name] = plugin
         self._menu_index[menu_number] = name
+        self._name_to_menu[name] = menu_number
+        self._invalidate()
 
     def unregister(self, name: str) -> bool:
         """Unregister a plugin by name.
@@ -48,10 +57,22 @@ class PluginRegistry:
         if name not in self._plugins:
             return False
 
-        plugin = self._plugins[name]
-        del self._menu_index[plugin.metadata.menu_number]
         del self._plugins[name]
+        menu_number = self._name_to_menu.pop(name, None)
+        if menu_number is not None:
+            self._menu_index.pop(menu_number, None)
+        self._invalidate()
         return True
+
+    def _invalidate(self) -> None:
+        """Drop cached derived state after a change."""
+        self._sorted_cache = None
+        self._version += 1
+
+    @property
+    def version(self) -> int:
+        """A counter that changes whenever the set of plugins changes."""
+        return self._version
 
     def get_by_name(self, name: str) -> Plugin | None:
         """Get a plugin by its name.
@@ -84,7 +105,14 @@ class PluginRegistry:
         Returns:
             List of plugins sorted by menu number
         """
-        return sorted(self._plugins.values(), key=lambda p: p.metadata.menu_number)
+        # Cached: the sort key reads plugin.metadata, which builds and
+        # validates a fresh dataclass on every access, and this runs on the
+        # per-message path via the menu.
+        if self._sorted_cache is None:
+            self._sorted_cache = sorted(
+                self._plugins.values(), key=lambda p: self._name_to_menu[p.metadata.name]
+            )
+        return list(self._sorted_cache)
 
     @property
     def plugin_count(self) -> int:

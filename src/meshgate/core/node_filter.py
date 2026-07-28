@@ -29,9 +29,19 @@ class NodeFilter:
             denylist: List of denied node IDs (always blocks these)
             require_allowlist: If True, only allowlisted nodes can connect
         """
-        self._allowlist: set[str] = set(allowlist) if allowlist else set()
-        self._denylist: set[str] = set(denylist) if denylist else set()
+        self._allowlist = frozenset(self._normalize(n) for n in allowlist or ())
+        self._denylist = frozenset(self._normalize(n) for n in denylist or ())
         self._require_allowlist = require_allowlist
+
+    @staticmethod
+    def _normalize(node_id: str) -> str:
+        """Normalize a node ID for comparison.
+
+        Meshtastic IDs are lowercase hex, so a config entry written as
+        "!A4F2C1D0" would otherwise never match and silently allow the node
+        it was meant to block.
+        """
+        return node_id.strip().lower()
 
     def is_allowed(self, node_id: str) -> bool:
         """Check if a node is allowed to connect.
@@ -42,28 +52,31 @@ class NodeFilter:
         Returns:
             True if the node is allowed, False otherwise
         """
-        # Denylist always blocks
-        if node_id in self._denylist:
-            logger.warning(f"Node {node_id} rejected: in denylist")
+        normalized = self._normalize(node_id)
+
+        # Denylist always blocks. Logged at debug: rejection is an expected
+        # steady state, and this runs on the packet-dispatch thread.
+        if normalized in self._denylist:
+            logger.debug(f"Node {node_id} rejected: in denylist")
             return False
 
         # If allowlist required, must be in allowlist
         if self._require_allowlist:
-            if node_id not in self._allowlist:
-                logger.warning(f"Node {node_id} rejected: not in allowlist")
+            if normalized not in self._allowlist:
+                logger.debug(f"Node {node_id} rejected: not in allowlist")
                 return False
 
         return True
 
     @property
-    def allowlist(self) -> set[str]:
+    def allowlist(self) -> frozenset[str]:
         """Get the current allowlist."""
-        return self._allowlist.copy()
+        return self._allowlist
 
     @property
-    def denylist(self) -> set[str]:
+    def denylist(self) -> frozenset[str]:
         """Get the current denylist."""
-        return self._denylist.copy()
+        return self._denylist
 
     @property
     def require_allowlist(self) -> bool:

@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import time
 from dataclasses import asdict
 
 from meshgate.config import Config
@@ -36,6 +37,12 @@ class HandlerServer:
     # Delay between sending message chunks (seconds)
     CHUNK_DELAY_SECONDS = 0.5
 
+    # Maximum messages handled concurrently across all nodes
+    MAX_CONCURRENT_HANDLERS = 10
+
+    # How long stop() waits for in-flight handlers before cancelling them
+    SHUTDOWN_GRACE_SECONDS = 5.0
+
     def __init__(
         self,
         config: Config | None = None,
@@ -50,6 +57,17 @@ class HandlerServer:
         self._config = config or Config.default()
         self._running = False
         self._cleanup_task: asyncio.Task | None = None
+
+        # Messages are handled concurrently so one slow plugin call cannot
+        # stall the whole mesh, but each node is serialized against itself:
+        # Session is mutable and unlocked, so two overlapping messages from the
+        # same node would otherwise interleave and corrupt plugin_state.
+        self._semaphore = asyncio.Semaphore(self.MAX_CONCURRENT_HANDLERS)
+        self._node_locks: dict[str, asyncio.Lock] = {}
+        self._inflight: set[asyncio.Task] = set()
+
+        # When each node was last told it is rate limited
+        self._rate_limit_notified: dict[str, float] = {}
 
         self._setup_components()
         self._setup_security()
@@ -177,20 +195,42 @@ class HandlerServer:
 
             logger.info("Server started. Listening for messages...")
 
-            # Main message processing loop
+            # Main message processing loop. Dispatch rather than await, so a
+            # slow plugin call for one node does not block every other node.
             async for message in self._transport.listen():
                 if not self._running:
                     break
-                await self._handle_message(message)
+                self._dispatch(message)
 
         except Exception as e:
             logger.error(f"Server error: {e}")
             raise
-        finally:
-            await self.stop()
+
+    def _dispatch(self, incoming: IncomingMessage) -> None:
+        """Schedule handling of an incoming message without blocking the loop."""
+        task = asyncio.create_task(self._handle_serialized(incoming))
+        # Keep a strong reference: asyncio only holds a weak one, so an
+        # untracked task can be garbage collected mid-flight.
+        self._inflight.add(task)
+        task.add_done_callback(self._inflight.discard)
+
+    async def _handle_serialized(self, incoming: IncomingMessage) -> None:
+        """Handle a message under the global cap and the node's own lock."""
+        node_id = incoming.context.node_id
+        lock = self._node_locks.setdefault(node_id, asyncio.Lock())
+        try:
+            async with self._semaphore, lock:
+                await self._handle_message(incoming)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.error(f"Unhandled error dispatching message from {node_id}: {e}")
 
     async def stop(self) -> None:
-        """Stop the server and disconnect."""
+        """Stop the server and disconnect.
+
+        Safe to call more than once.
+        """
         logger.info("Stopping server...")
         self._running = False
 
@@ -203,8 +243,35 @@ class HandlerServer:
                 pass
             self._cleanup_task = None
 
+        # Let in-flight handlers finish before cancelling, so a multi-chunk
+        # reply already going out is not truncated mid-send.
+        if self._inflight:
+            pending = list(self._inflight)
+            done, still_running = await asyncio.wait(
+                pending, timeout=self.SHUTDOWN_GRACE_SECONDS
+            )
+            for task in still_running:
+                task.cancel()
+            if still_running:
+                logger.warning(f"Cancelled {len(still_running)} in-flight handlers")
+                await asyncio.gather(*still_running, return_exceptions=True)
+            self._inflight.clear()
+        self._node_locks.clear()
+
+        await self._close_plugin_clients()
         await self._transport.disconnect()
         logger.info("Server stopped")
+
+    async def _close_plugin_clients(self) -> None:
+        """Close HTTP clients held by plugins that expose an aclose() hook."""
+        for plugin in self._registry.get_all_plugins():
+            aclose = getattr(plugin, "aclose", None)
+            if aclose is None:
+                continue
+            try:
+                await aclose()
+            except Exception as e:
+                logger.warning(f"Error closing plugin '{plugin.metadata.name}': {e}")
 
     async def _periodic_cleanup(self) -> None:
         """Periodically clean up expired sessions and rate limiter data."""
@@ -224,6 +291,18 @@ class HandlerServer:
                         logger.debug(
                             f"Cleaned up rate limit data for {rate_removed} nodes"
                         )
+
+                    # Drop per-node locks that nobody is holding or waiting on,
+                    # otherwise the dict grows one entry per node seen.
+                    for node_id, lock in list(self._node_locks.items()):
+                        if not lock.locked():
+                            del self._node_locks[node_id]
+
+                    window = self._config.security.rate_limit_window_seconds
+                    now = time.monotonic()
+                    for node_id, notified_at in list(self._rate_limit_notified.items()):
+                        if now - notified_at > window:
+                            del self._rate_limit_notified[node_id]
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -242,10 +321,14 @@ class HandlerServer:
             # Check rate limit
             rate_result = self._rate_limiter.check(node_id)
             if not rate_result.allowed:
-                retry_seconds = int(rate_result.retry_after_seconds or 0)
-                await self._send_response(
-                    node_id, f"Rate limited. Try in {retry_seconds}s"
-                )
+                # Notify at most once per window. Replying to every rejected
+                # message would spend more shared airtime than it saves on a
+                # duty-cycle-limited half-duplex mesh.
+                if self._should_notify_rate_limit(node_id):
+                    retry_seconds = int(rate_result.retry_after_seconds or 0)
+                    await self._send_response(
+                        node_id, f"Rate limited. Try in {retry_seconds}s"
+                    )
                 return
 
             # Get or create session
@@ -262,13 +345,35 @@ class HandlerServer:
             # Send response (chunked if necessary)
             await self._send_response(node_id, response_text)
 
-        except Exception as e:
-            logger.error(f"Error handling message: {e}")
-            # Try to send error response
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Error handling message")
+            # Send a fixed string, never the exception text: it is unbounded
+            # in length and can expose internal URLs and paths.
             try:
-                await self._send_response(incoming.context.node_id, f"Error: {e}")
+                await self._send_response(
+                    incoming.context.node_id, "Sorry, something went wrong."
+                )
             except Exception:
                 pass
+
+    def _should_notify_rate_limit(self, node_id: str) -> bool:
+        """Check whether this node is due another rate-limit notice.
+
+        Args:
+            node_id: The node being rate limited
+
+        Returns:
+            True if a notice should be sent now
+        """
+        window = self._config.security.rate_limit_window_seconds
+        now = time.monotonic()
+        last = self._rate_limit_notified.get(node_id)
+        if last is not None and now - last < window:
+            return False
+        self._rate_limit_notified[node_id] = now
+        return True
 
     async def _send_response(self, node_id: str, message: str) -> None:
         """Send a response, chunking if necessary.
@@ -279,13 +384,15 @@ class HandlerServer:
         """
         chunks = self._chunker.chunk(message)
 
-        for chunk in chunks:
+        last_index = len(chunks) - 1
+        for i, chunk in enumerate(chunks):
             success = await self._transport.send_message(node_id, chunk)
             if not success:
                 logger.warning(f"Failed to send chunk to {node_id}")
 
-            # Small delay between chunks to avoid overwhelming the network
-            if len(chunks) > 1:
+            # Small delay between chunks to avoid overwhelming the network.
+            # Only between chunks - a trailing sleep is pure dead airtime.
+            if i < last_index:
                 await asyncio.sleep(self.CHUNK_DELAY_SECONDS)
 
     @property

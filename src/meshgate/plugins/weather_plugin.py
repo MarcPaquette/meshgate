@@ -69,7 +69,6 @@ class WeatherPlugin(HTTPPluginBase):
         if not context.location:
             return PluginResponse(
                 message="No GPS location available. Enable GPS on your device.",
-                plugin_state=plugin_state,
             )
 
         lat = context.location.latitude
@@ -112,10 +111,13 @@ class WeatherPlugin(HTTPPluginBase):
         humidity = current.get("relative_humidity_2m", "?")
         weather_code = current.get("weather_code", 0)
         wind_speed = current.get("wind_speed_10m", "?")
-        wind_dir = current.get("wind_direction_10m", 0)
+        # A .get() default only covers a missing key; Open-Meteo reports null
+        # for some stations, and unlike the other fields this one feeds
+        # arithmetic rather than being interpolated straight into the text.
+        wind_dir = current.get("wind_direction_10m")
 
         condition = WMO_WEATHER_CODES.get(weather_code, "Unknown")
-        wind_cardinal = self._degrees_to_cardinal(wind_dir)
+        wind_cardinal = self._degrees_to_cardinal(wind_dir) if wind_dir is not None else "?"
 
         weather_text = (
             f"Current Weather:\n"
@@ -127,7 +129,6 @@ class WeatherPlugin(HTTPPluginBase):
 
         return PluginResponse(
             message=weather_text,
-            plugin_state={"last_lat": lat, "last_lon": lon},
         )
 
     async def _handle_forecast(self, lat: float, lon: float) -> PluginResponse:
@@ -173,7 +174,6 @@ class WeatherPlugin(HTTPPluginBase):
 
         return PluginResponse(
             message="\n".join(lines),
-            plugin_state={"last_lat": lat, "last_lon": lon},
         )
 
     def _degrees_to_cardinal(self, degrees: float) -> str:

@@ -162,3 +162,68 @@ class TestWeatherPlugin:
         response = await plugin.handle("!refresh", context_with_gps, {})
 
         assert response.message
+
+
+class TestNullFieldHandling:
+    """Open-Meteo returns null for some fields at some stations."""
+
+    @pytest.fixture
+    def plugin(self) -> WeatherPlugin:
+        return WeatherPlugin(timeout=5.0)
+
+    @pytest.fixture
+    def context_with_gps(self) -> NodeContext:
+        return NodeContext(
+            node_id="!test123",
+            location=GPSLocation(latitude=40.7128, longitude=-74.0060),
+        )
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_null_wind_direction_does_not_crash(
+        self, plugin: WeatherPlugin, context_with_gps: NodeContext
+    ) -> None:
+        """Regression: null wind direction raised TypeError in round()."""
+        respx.get("https://api.open-meteo.com/v1/forecast").mock(
+            return_value=Response(
+                200,
+                json={
+                    "current": {
+                        "temperature_2m": 12.0,
+                        "relative_humidity_2m": 60,
+                        "weather_code": 0,
+                        "wind_speed_10m": 5.0,
+                        "wind_direction_10m": None,
+                    }
+                },
+            )
+        )
+
+        response = await plugin.handle("!refresh", context_with_gps, {})
+
+        assert "12.0" in response.message
+        assert "Error" not in response.message
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_valid_wind_direction_still_rendered(
+        self, plugin: WeatherPlugin, context_with_gps: NodeContext
+    ) -> None:
+        respx.get("https://api.open-meteo.com/v1/forecast").mock(
+            return_value=Response(
+                200,
+                json={
+                    "current": {
+                        "temperature_2m": 12.0,
+                        "relative_humidity_2m": 60,
+                        "weather_code": 0,
+                        "wind_speed_10m": 5.0,
+                        "wind_direction_10m": 90,
+                    }
+                },
+            )
+        )
+
+        response = await plugin.handle("!refresh", context_with_gps, {})
+
+        assert "E" in response.message

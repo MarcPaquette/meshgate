@@ -1,9 +1,11 @@
 """Tests for configuration loading."""
 
+import logging
 import tempfile
 from pathlib import Path
 
 import pytest
+import yaml
 
 from meshgate.config import Config
 
@@ -232,3 +234,73 @@ security:
 
         assert config.server.session_cleanup_interval_minutes == 10
         assert config.server.max_sessions == 500
+
+
+class TestConfigEmptySections:
+    """A YAML section with no body parses as None, not an empty mapping."""
+
+    def test_valueless_section_uses_defaults(self) -> None:
+        """Regression: 'server:' with no body raised AttributeError."""
+        data = yaml.safe_load("server:\nmeshtastic:\n  device: /dev/ttyUSB0\n")
+
+        config = Config.from_dict(data)
+
+        assert config.server.max_message_size == 200
+        assert config.meshtastic.device == "/dev/ttyUSB0"
+
+    def test_all_sections_valueless(self) -> None:
+        """Every section header present but empty should still load."""
+        data = yaml.safe_load(
+            "server:\nmeshtastic:\nsecurity:\nplugins:\nplugin_paths:\n"
+        )
+
+        config = Config.from_dict(data)
+
+        assert config.server.session_timeout_minutes == 60
+        assert config.plugin_paths == []
+
+    def test_valueless_plugin_subsection(self) -> None:
+        data = yaml.safe_load("plugins:\n  weather:\n  wikipedia:\n    language: de\n")
+
+        config = Config.from_dict(data)
+
+        assert config.plugins.weather.timeout == 10.0
+        assert config.plugins.wikipedia.language == "de"
+
+    def test_empty_document(self) -> None:
+        assert Config.from_dict(yaml.safe_load("") or {}).server.max_message_size == 200
+
+
+class TestConfigValidation:
+    """Bad values should fail at load time with a clear message."""
+
+    def test_rejects_unknown_connection_type(self) -> None:
+        with pytest.raises(ValueError, match="connection_type"):
+            Config.from_dict({"meshtastic": {"connection_type": "carrier-pigeon"}})
+
+    def test_rejects_out_of_range_port(self) -> None:
+        with pytest.raises(ValueError, match="tcp_port"):
+            Config.from_dict({"meshtastic": {"tcp_port": 99999}})
+
+    def test_rejects_tiny_message_size(self) -> None:
+        with pytest.raises(ValueError, match="max_message_size"):
+            Config.from_dict({"server": {"max_message_size": 5}})
+
+    def test_rejects_zero_rate_limit_window(self) -> None:
+        """A zero window would make every check reject permanently."""
+        with pytest.raises(ValueError, match="rate_limit_window_seconds"):
+            Config.from_dict({"security": {"rate_limit_window_seconds": 0}})
+
+    def test_unknown_keys_are_reported(self, caplog: pytest.LogCaptureFixture) -> None:
+        """A typo'd security setting must not be silently discarded."""
+        with caplog.at_level(logging.WARNING):
+            config = Config.from_dict({"security": {"rate_limit_enable": True}})
+
+        assert config.security.rate_limit_enabled is False
+        assert "rate_limit_enable" in caplog.text
+
+    def test_valid_config_passes(self) -> None:
+        config = Config.from_dict(
+            {"meshtastic": {"connection_type": "tcp", "tcp_host": "h", "tcp_port": 4403}}
+        )
+        assert config.meshtastic.connection_type == "tcp"

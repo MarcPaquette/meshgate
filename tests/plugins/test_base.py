@@ -218,3 +218,23 @@ class TestHTTPPluginBase:
         result = plugin._truncate(text, 15, suffix="[more]")
         assert len(result) == 15
         assert result.endswith("[more]")
+
+
+class TestTruncateBounds:
+    """_truncate must never return more than max_length characters."""
+
+    @pytest.fixture
+    def plugin(self) -> "ConcreteHTTPPlugin":
+        return ConcreteHTTPPlugin()
+
+    def test_max_length_shorter_than_suffix(self, plugin: "ConcreteHTTPPlugin") -> None:
+        """Regression: a negative slice index made the result longer."""
+        result = plugin._truncate("some long text", 2)
+        assert len(result) <= 2
+
+    def test_max_length_equal_to_suffix(self, plugin: "ConcreteHTTPPlugin") -> None:
+        result = plugin._truncate("some long text", 3)
+        assert len(result) <= 3
+
+    def test_zero_max_length(self, plugin: "ConcreteHTTPPlugin") -> None:
+        assert plugin._truncate("some long text", 0) == ""
