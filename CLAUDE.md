@@ -111,4 +111,4 @@ async def handle(self, message, context, plugin_state):
 
 ## Issue Tracking
 
-This project uses `bd` (beads) for issue tracking. See AGENTS.md for workflow.
+Use GitHub issues. See AGENTS.md for the session workflow.
