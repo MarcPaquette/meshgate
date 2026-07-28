@@ -19,7 +19,8 @@ class TestPluginLoader:
     def test_load_builtin_plugin(self, loader: PluginLoader) -> None:
         """Test loading a built-in plugin by module path."""
         plugin = loader.load_plugin("meshgate.plugins.weather_plugin")
-        assert plugin.metadata.name  # Non-empty name
+        assert plugin.metadata.name
+        assert plugin.metadata.menu_number >= 1
 
     def test_load_nonexistent_module(self, loader: PluginLoader) -> None:
         """Test loading nonexistent module raises error."""

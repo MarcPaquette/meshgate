@@ -101,12 +101,10 @@ class TestSession:
     def test_update_plugin_state_checks_merged_size(self) -> None:
         """Test that size check considers existing + new state."""
         session = Session(node_id="!abc123")
-        # First update succeeds (large but within limit)
+        # 500 + 1600 = 2100 bytes content, exceeding 2048 only when merged
         session.update_plugin_state({"existing": "x" * 500}, max_bytes=2048)
-        # Second update that would clearly push over limit fails
-        result = session.update_plugin_state({"new": "y" * 50000}, max_bytes=2048)
+        result = session.update_plugin_state({"new": "y" * 1600}, max_bytes=2048)
         assert result is False
-        # Original state preserved
         assert "existing" in session.plugin_state
         assert "new" not in session.plugin_state
 

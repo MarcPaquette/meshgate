@@ -230,6 +230,58 @@ meshgate/
 └── config.sample.yaml       # Example configuration
 ```
 
+### Architecture
+
+Message flow from a Meshtastic device through the server and back:
+
+```
+   ┌──────────────────┐
+   │ Meshtastic Node  │
+   └────────┬─────────┘
+            │ IncomingMessage
+            ▼
+   ┌──────────────────────────────────────────────────┐
+   │                  HandlerServer                   │
+   │  ┌────────────────┐      ┌───────────────────┐   │
+   │  │ SessionManager │◄────►│  PluginRegistry   │   │
+   │  └────────┬───────┘      └─────────┬─────────┘   │
+   │           │                        │             │
+   │           ▼                        ▼             │
+   │  ┌────────────────────────────────────────────┐  │
+   │  │             MessageRouter                  │  │
+   │  │  • Universal cmds (!exit, !menu, !help)    │  │
+   │  │  • Menu number → enter plugin              │  │
+   │  │  • In-plugin → plugin.handle()             │  │
+   │  └────────────────────┬───────────────────────┘  │
+   │                       │                          │
+   │                       ▼                          │
+   │  ┌────────────────────────────────────────────┐  │
+   │  │   Plugin.handle(message, context, state)   │  │
+   │  │   ─────────────────────────────────────    │  │
+   │  │   Gopher │ LLM │ Weather │ Wikipedia │ …   │  │
+   │  └────────────────────┬───────────────────────┘  │
+   │                       │ PluginResponse           │
+   │                       ▼                          │
+   │  ┌────────────────────────────────────────────┐  │
+   │  │   ContentChunker (200-char message limit)  │  │
+   │  └────────────────────┬───────────────────────┘  │
+   └───────────────────────┼──────────────────────────┘
+                           ▼
+            ┌──────────────────────────┐
+            │   MeshtasticTransport    │
+            │   (serial / tcp / ble)   │
+            └──────────────┬───────────┘
+                           ▼
+                  ┌──────────────────┐
+                  │ Meshtastic Node  │
+                  └──────────────────┘
+```
+
+Key points:
+- **Per-node sessions**: each Meshtastic node ID has its own `Session` tracking the active plugin and `plugin_state`.
+- **Stateless plugins**: state is passed in via `plugin_state` and updated via `PluginResponse.plugin_state`.
+- **Pluggable transport**: `MessageTransport` is an interface — tests inject `MockTransport`.
+
 ### Creating Custom Plugins
 
 #### Basic Plugin

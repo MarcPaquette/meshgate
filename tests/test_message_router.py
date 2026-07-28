@@ -44,7 +44,7 @@ class TestMessageRouter:
         router = MessageRouter(registry)
 
         result = router.get_menu()
-        assert result  # Non-empty menu even without plugins
+        assert result
 
     def test_get_menu_with_plugins(self) -> None:
         """Test get_menu with plugins."""

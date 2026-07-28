@@ -50,7 +50,6 @@ class TestGopherPlugin:
         """Test listing root directory."""
         response = await plugin.handle("!home", context, {})
 
-        # Should list directory contents from the fixture
         assert "folder1/" in response.message or "file1.txt" in response.message
 
     @pytest.mark.asyncio
@@ -106,7 +105,6 @@ class TestGopherPlugin:
         subfolder = temp_gopher_dir / "folder1"
         response = await plugin.handle("!back", context, {"current_path": str(subfolder)})
 
-        # Should now show root directory contents
         assert "folder1/" in response.message or "file1.txt" in response.message
 
     @pytest.mark.asyncio
@@ -116,7 +114,6 @@ class TestGopherPlugin:
         """Test !back at root stays at root."""
         response = await plugin.handle("!back", context, {"current_path": str(temp_gopher_dir)})
 
-        # Should still show root contents (stayed at root)
         current = response.plugin_state.get("current_path", str(temp_gopher_dir))
         assert current == str(temp_gopher_dir)
 
@@ -128,7 +125,6 @@ class TestGopherPlugin:
         subfolder = temp_gopher_dir / "folder1"
         response = await plugin.handle("!home", context, {"current_path": str(subfolder)})
 
-        # Should show root directory contents
         assert "folder1/" in response.message or "file1.txt" in response.message
 
     @pytest.mark.asyncio

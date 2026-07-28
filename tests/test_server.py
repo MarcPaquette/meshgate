@@ -109,17 +109,14 @@ class TestHandlerServerSingleMessage:
         """Test empty message shows menu for new session."""
         response = await server.handle_single_message("", node_id="!test123")
 
-        # Menu should contain all registered plugin names
         for plugin in server.registry.get_all_plugins():
             assert plugin.metadata.name in response
 
     @pytest.mark.asyncio
     async def test_menu_selection_enters_plugin(self, server: HandlerServer) -> None:
         """Test menu selection enters the selected plugin."""
-        # First, show menu
         await server.handle_single_message("", node_id="!test123")
 
-        # Select plugin 1
         plugin_at_1 = server.registry.get_by_menu_number(1)
         response = await server.handle_single_message("1", node_id="!test123")
 
@@ -214,10 +211,8 @@ class TestHandlerServerLifecycle:
             mock_transport.inject_message("", node_id="!test123")
             await asyncio.sleep(0.2)
 
-        # Check message was sent (should be the menu)
         assert len(mock_transport.sent_messages) > 0
         all_sent = " ".join(msg for _, msg in mock_transport.sent_messages)
-        # Menu should contain at least one registered plugin name
         plugin_names = [p.metadata.name for p in server.registry.get_all_plugins()]
         assert any(name in all_sent for name in plugin_names)
 
@@ -234,10 +229,8 @@ class TestHandlerServerLifecycle:
 
         # Menu response is longer than 30 chars, so must be chunked into multiple messages
         assert len(mock_transport.sent_messages) > 1
-        # First chunk should end with continuation marker
         _, first_message = mock_transport.sent_messages[0]
-        assert first_message.endswith(ContentChunker.MORE_MARKER.lstrip())
-        # All chunks should respect the size limit
+        assert first_message.endswith(ContentChunker.MORE_MARKER)
         for _, msg in mock_transport.sent_messages:
             assert len(msg) <= 30
 
@@ -417,28 +410,17 @@ class TestHandlerServerExternalPlugins:
         self, mock_transport: MockTransport, plugin_dir: Path, builtin_count: int
     ) -> None:
         """Test that plugins with conflicting menu numbers are skipped."""
-        # Query the initial plugin at menu 1
-        baseline_server = HandlerServer(config=Config.default(), transport=mock_transport)
-        original_plugin = baseline_server.registry.get_by_menu_number(1)
-        original_name = original_plugin.metadata.name
-
-        # Create a plugin with menu number 1 (conflicts with built-in)
         plugin_file = plugin_dir / "conflicting_plugin.py"
         plugin_file.write_text(SAMPLE_PLUGIN_CODE.format(menu_number=1))
 
         config = Config.default()
         config.plugin_paths = [str(plugin_dir)]
-
-        # Should not raise, just log warning about conflict
         server = HandlerServer(config=config, transport=mock_transport)
 
-        # Should still have only built-in plugins (external one was skipped)
         assert server.registry.plugin_count == builtin_count
-
-        # Original built-in should still be at menu 1
         plugin = server.registry.get_by_menu_number(1)
         assert plugin is not None
-        assert plugin.metadata.name == original_name
+        assert plugin.metadata.name != "Sample External"
 
     def test_loads_multiple_external_plugins(
         self, mock_transport: MockTransport, plugin_dir: Path, builtin_count: int

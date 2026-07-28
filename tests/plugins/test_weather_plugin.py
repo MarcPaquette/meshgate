@@ -118,7 +118,7 @@ class TestWeatherPlugin:
 
         response = await plugin.handle("!refresh", context_with_gps, {})
 
-        # Wind from 180 degrees should show "S" (south) in the response
+        # Wind from 180° → cardinal "S"
         assert "S" in response.message
 
     @pytest.mark.asyncio
@@ -144,7 +144,6 @@ class TestWeatherPlugin:
 
         response = await plugin.handle("", context_with_gps, {})
 
-        # Should contain data values from mock response
         assert "20" in response.message  # Temperature from mock
 
     @pytest.mark.asyncio
@@ -162,5 +161,4 @@ class TestWeatherPlugin:
 
         response = await plugin.handle("!refresh", context_with_gps, {})
 
-        # Should degrade gracefully - response should be non-empty
         assert response.message

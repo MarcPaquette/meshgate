@@ -183,7 +183,7 @@ class TestWikipediaPlugin:
         """Test empty message prompts for search."""
         response = await plugin.handle("", context, {})
 
-        assert response.message  # Non-empty prompt
+        assert response.message
 
     @pytest.mark.asyncio
     @respx.mock

@@ -100,7 +100,7 @@ class TestHTTPPluginBase:
             result = await plugin._safe_request(client.get, "https://example.com/api")
 
         assert isinstance(result, PluginResponse)
-        assert result.message  # Non-empty error message
+        assert "Test Service" in result.message
 
     @pytest.mark.asyncio
     @respx.mock
@@ -145,7 +145,7 @@ class TestHTTPPluginBase:
         result = await plugin._fetch_json("https://example.com/api")
 
         assert isinstance(result, PluginResponse)
-        assert result.message  # Non-empty error message
+        assert "Test Service" in result.message
 
     @pytest.mark.asyncio
     @respx.mock
