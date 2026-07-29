@@ -47,14 +47,40 @@ class HTTPPluginBase(Plugin, ABC):
         """
         self.timeout = timeout if timeout is not None else self.DEFAULT_TIMEOUT
         self.service_name = service_name
+        self._client: httpx.AsyncClient | None = None
 
     def _create_client(self) -> httpx.AsyncClient:
         """Create an HTTP client with configured timeout.
 
         Returns:
-            Configured httpx.AsyncClient for use with async context manager
+            Configured httpx.AsyncClient for use with an async context manager
         """
-        return httpx.AsyncClient(timeout=self.timeout)
+        return httpx.AsyncClient(
+            # Connect gets its own shorter budget so an unreachable host fails
+            # fast instead of burning the full request timeout.
+            timeout=httpx.Timeout(self.timeout, connect=min(5.0, self.timeout)),
+            # httpx defaults this to False, unlike requests. Without it a 302
+            # (which Wikipedia returns for redirect titles) is not raised by
+            # raise_for_status and its empty body fails to parse as JSON.
+            follow_redirects=True,
+            limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
+        )
+
+    def _get_client(self) -> httpx.AsyncClient:
+        """Get the shared HTTP client, creating it on first use.
+
+        One client per plugin instance keeps the connection pool warm; building
+        a new one per request costs a TCP and TLS handshake every time.
+        """
+        if self._client is None or self._client.is_closed:
+            self._client = self._create_client()
+        return self._client
+
+    async def aclose(self) -> None:
+        """Close the shared HTTP client. Called by the server on shutdown."""
+        if self._client is not None and not self._client.is_closed:
+            await self._client.aclose()
+        self._client = None
 
     async def _safe_request(
         self,
@@ -85,9 +111,11 @@ class HTTPPluginBase(Plugin, ABC):
             return PluginResponse(
                 message=f"{self.service_name} error: HTTP {e.response.status_code}"
             )
-        except Exception as e:
-            logger.error(f"{self.service_name} error: {e}")
-            return PluginResponse(message=f"{self.service_name} error: {e}")
+        except Exception:
+            # Log the detail, but never put raw exception text on the radio:
+            # it is unbounded in length and can leak internal URLs/hostnames.
+            logger.exception(f"{self.service_name} request failed")
+            return PluginResponse(message=f"{self.service_name} is unavailable.")
 
     async def _request_json(
         self,
@@ -106,12 +134,12 @@ class HTTPPluginBase(Plugin, ABC):
             Parsed JSON dict on success, or PluginResponse with error message
         """
         try:
-            async with self._create_client() as client:
-                request_func = getattr(client, method)
-                response = await self._safe_request(request_func, url, **kwargs)
-                if isinstance(response, PluginResponse):
-                    return response
-                return response.json()
+            client = self._get_client()
+            request_func = getattr(client, method)
+            response = await self._safe_request(request_func, url, **kwargs)
+            if isinstance(response, PluginResponse):
+                return response
+            return response.json()
         except Exception as e:
             logger.error(f"JSON parsing error from {self.service_name}: {e}")
             return PluginResponse(message=f"Invalid response from {self.service_name}")
@@ -166,4 +194,8 @@ class HTTPPluginBase(Plugin, ABC):
         """
         if len(text) <= max_length:
             return text
+        if max_length <= len(suffix):
+            # A negative slice index would otherwise return a string longer
+            # than max_length.
+            return suffix[:max_length]
         return text[: max_length - len(suffix)] + suffix

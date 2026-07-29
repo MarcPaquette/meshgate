@@ -1,7 +1,7 @@
 """Session manager for multi-node session management."""
 
 import logging
-from datetime import datetime, timedelta
+from collections import OrderedDict
 
 from meshgate.core.session import Session
 
@@ -24,17 +24,17 @@ class SessionManager:
         Node !xyz → sends "!exit" → returns to menu (abc unaffected)
     """
 
-    def __init__(
-        self, session_timeout_minutes: int = 60, max_sessions: int = 0
-    ) -> None:
+    def __init__(self, session_timeout_minutes: int = 60, max_sessions: int = 0) -> None:
         """Initialize the session manager.
 
         Args:
             session_timeout_minutes: Time in minutes before inactive sessions are cleaned up
             max_sessions: Maximum number of concurrent sessions (0 = unlimited)
         """
-        self._sessions: dict[str, Session] = {}
-        self._timeout = timedelta(minutes=session_timeout_minutes)
+        # Ordered so the least recently active session is always first,
+        # making eviction O(1) instead of a min() scan per new node.
+        self._sessions: OrderedDict[str, Session] = OrderedDict()
+        self._timeout_seconds = session_timeout_minutes * 60
         self._max_sessions = max_sessions
 
     def get_session(self, node_id: str) -> Session:
@@ -53,10 +53,14 @@ class SessionManager:
             # Enforce max sessions limit before creating new session
             if self._max_sessions > 0:
                 while len(self._sessions) >= self._max_sessions:
-                    self._evict_oldest_session()
+                    if self._evict_oldest_session() is None:
+                        break
             self._sessions[node_id] = Session(node_id=node_id)
+
         session = self._sessions[node_id]
         session.update_activity()
+        # Most recently active moves to the end.
+        self._sessions.move_to_end(node_id)
         return session
 
     def _evict_oldest_session(self) -> str | None:
@@ -68,11 +72,7 @@ class SessionManager:
         if not self._sessions:
             return None
 
-        # Find session with oldest last_activity
-        oldest_node_id = min(
-            self._sessions.keys(), key=lambda nid: self._sessions[nid].last_activity
-        )
-        del self._sessions[oldest_node_id]
+        oldest_node_id, _ = self._sessions.popitem(last=False)
         logger.info(f"Evicted oldest session for node {oldest_node_id} (max sessions reached)")
         return oldest_node_id
 
@@ -107,11 +107,10 @@ class SessionManager:
         Returns:
             Number of sessions removed
         """
-        now = datetime.now()
         expired_nodes = [
             node_id
             for node_id, session in self._sessions.items()
-            if now - session.last_activity > self._timeout
+            if session.idle_seconds() > self._timeout_seconds
         ]
         for node_id in expired_nodes:
             del self._sessions[node_id]

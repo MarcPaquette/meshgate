@@ -2,6 +2,7 @@
 
 import pytest
 
+from meshgate.core.message_router import MessageRouter
 from meshgate.core.plugin_registry import PluginRegistry
 from tests.mocks import MockPlugin
 
@@ -109,3 +110,80 @@ class TestPluginRegistry:
 
         assert "Test" in plugin_registry
         assert "Other" not in plugin_registry
+
+
+class TestRegistryCaching:
+    """get_all_plugins() is cached, so changes must invalidate it."""
+
+    def test_registering_updates_the_list(self) -> None:
+        registry = PluginRegistry()
+        registry.register(MockPlugin(name="A", menu_number=1))
+        assert [p.metadata.name for p in registry.get_all_plugins()] == ["A"]
+
+        registry.register(MockPlugin(name="B", menu_number=2))
+
+        assert [p.metadata.name for p in registry.get_all_plugins()] == ["A", "B"]
+
+    def test_unregistering_updates_the_list(self) -> None:
+        registry = PluginRegistry()
+        registry.register(MockPlugin(name="A", menu_number=1))
+        registry.register(MockPlugin(name="B", menu_number=2))
+        registry.get_all_plugins()  # populate the cache
+
+        registry.unregister("A")
+
+        assert [p.metadata.name for p in registry.get_all_plugins()] == ["B"]
+
+    def test_menu_number_is_freed_after_unregister(self) -> None:
+        """The two indexes must stay in step."""
+        registry = PluginRegistry()
+        registry.register(MockPlugin(name="A", menu_number=1))
+        registry.unregister("A")
+
+        registry.register(MockPlugin(name="B", menu_number=1))
+
+        assert registry.get_by_menu_number(1).metadata.name == "B"
+
+    def test_version_changes_on_mutation(self) -> None:
+        registry = PluginRegistry()
+        start = registry.version
+
+        registry.register(MockPlugin(name="A", menu_number=1))
+        after_register = registry.version
+        registry.unregister("A")
+
+        assert after_register != start
+        assert registry.version != after_register
+
+    def test_caller_cannot_mutate_the_cache(self) -> None:
+        """get_all_plugins returns a copy, not the cached list."""
+        registry = PluginRegistry()
+        registry.register(MockPlugin(name="A", menu_number=1))
+
+        registry.get_all_plugins().clear()
+
+        assert len(registry.get_all_plugins()) == 1
+
+
+class TestRouterMenuCaching:
+    """The rendered menu is cached against the registry version."""
+
+    def test_menu_reflects_newly_registered_plugin(self) -> None:
+        registry = PluginRegistry()
+        registry.register(MockPlugin(name="First", menu_number=1))
+        router = MessageRouter(registry)
+        assert "First" in router.get_menu()
+
+        registry.register(MockPlugin(name="Second", menu_number=2))
+
+        assert "Second" in router.get_menu()
+
+    def test_menu_drops_unregistered_plugin(self) -> None:
+        registry = PluginRegistry()
+        registry.register(MockPlugin(name="Gone", menu_number=1))
+        router = MessageRouter(registry)
+        router.get_menu()
+
+        registry.unregister("Gone")
+
+        assert "Gone" not in router.get_menu()

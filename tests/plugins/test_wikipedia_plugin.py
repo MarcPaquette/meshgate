@@ -183,7 +183,7 @@ class TestWikipediaPlugin:
         """Test empty message prompts for search."""
         response = await plugin.handle("", context, {})
 
-        assert response.message  # Non-empty prompt
+        assert response.message
 
     @pytest.mark.asyncio
     @respx.mock
@@ -219,3 +219,83 @@ class TestWikipediaPlugin:
         response = await plugin.handle("99", context, state)
 
         assert "No results" in response.message
+
+
+class TestRandomClearsSearchResults:
+    """Session state is merged, not replaced, so stale keys must be cleared."""
+
+    @pytest.fixture
+    def plugin(self) -> WikipediaPlugin:
+        return WikipediaPlugin(language="en", max_summary_length=400, timeout=5.0)
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_random_clears_last_results(
+        self, plugin: WikipediaPlugin, context: NodeContext
+    ) -> None:
+        """Regression: a number after !random selected from the old search."""
+        respx.get("https://en.wikipedia.org/api/rest_v1/page/random/summary").mock(
+            return_value=Response(200, json={"title": "Random Article", "extract": "Body."})
+        )
+
+        response = await plugin.handle("!random", context, {"last_results": ["A", "B", "C"]})
+
+        assert response.plugin_state["last_results"] == []
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_number_after_random_is_a_new_search(
+        self, plugin: WikipediaPlugin, context: NodeContext
+    ) -> None:
+        """End to end: '2' after !random must not serve the old result 2."""
+        respx.get("https://en.wikipedia.org/api/rest_v1/page/random/summary").mock(
+            return_value=Response(200, json={"title": "Random", "extract": "Body."})
+        )
+        search = respx.get("https://en.wikipedia.org/w/api.php").mock(
+            return_value=Response(200, json=["2", [], [], []])
+        )
+
+        state = {"last_results": ["Alpha", "Beta", "Gamma"]}
+        random_response = await plugin.handle("!random", context, state)
+        state.update(random_response.plugin_state)
+
+        response = await plugin.handle("2", context, state)
+
+        assert search.called, "should have searched rather than reusing stale results"
+        assert "Beta" not in response.message
+
+
+class TestTitleEncoding:
+    """Titles must be percent-encoded, not just space-substituted."""
+
+    @pytest.fixture
+    def plugin(self) -> WikipediaPlugin:
+        return WikipediaPlugin(language="en", max_summary_length=400, timeout=5.0)
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_slash_in_title_is_escaped(
+        self, plugin: WikipediaPlugin, context: NodeContext
+    ) -> None:
+        """Regression: 'AC/DC' became an extra path segment and 404'd."""
+        route = respx.get("https://en.wikipedia.org/api/rest_v1/page/summary/AC%2FDC").mock(
+            return_value=Response(200, json={"title": "AC/DC", "extract": "Band."})
+        )
+
+        response = await plugin.handle("1", context, {"last_results": ["AC/DC"]})
+
+        assert route.called
+        assert "Band." in response.message
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_question_mark_in_title_is_escaped(
+        self, plugin: WikipediaPlugin, context: NodeContext
+    ) -> None:
+        route = respx.get("https://en.wikipedia.org/api/rest_v1/page/summary/Who%3F").mock(
+            return_value=Response(200, json={"title": "Who?", "extract": "Band."})
+        )
+
+        await plugin.handle("1", context, {"last_results": ["Who?"]})
+
+        assert route.called

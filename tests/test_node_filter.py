@@ -1,5 +1,7 @@
 """Tests for node filtering."""
 
+import pytest
+
 from meshgate.core.node_filter import NodeFilter
 
 
@@ -31,9 +33,7 @@ class TestNodeFilter:
 
     def test_require_allowlist_restricts_access(self) -> None:
         """Test that require_allowlist only allows listed nodes."""
-        node_filter = NodeFilter(
-            allowlist=["!allowed1", "!allowed2"], require_allowlist=True
-        )
+        node_filter = NodeFilter(allowlist=["!allowed1", "!allowed2"], require_allowlist=True)
 
         assert node_filter.is_allowed("!allowed1")
         assert node_filter.is_allowed("!allowed2")
@@ -69,14 +69,13 @@ class TestNodeFilter:
         assert node_filter.denylist == {"!c"}
         assert node_filter.require_allowlist is True
 
-    def test_properties_return_copies(self) -> None:
-        """Test that properties return copies, not originals."""
+    def test_properties_are_immutable(self) -> None:
+        """Callers must not be able to alter the filter through a property."""
         node_filter = NodeFilter(allowlist=["!a"])
 
-        allowlist = node_filter.allowlist
-        allowlist.add("!b")
+        with pytest.raises(AttributeError):
+            node_filter.allowlist.add("!b")
 
-        # Original should be unchanged
         assert node_filter.allowlist == {"!a"}
 
     def test_none_lists_treated_as_empty(self) -> None:
@@ -127,3 +126,29 @@ class TestNodeFilterIntegration:
         assert node_filter.is_allowed("!trusted2")
         assert not node_filter.is_allowed("!probation")  # Denylist wins
         assert not node_filter.is_allowed("!random")
+
+
+class TestNodeIdNormalization:
+    """Meshtastic IDs are lowercase hex; config entries may not be."""
+
+    def test_uppercase_denylist_entry_still_blocks(self) -> None:
+        """Regression: '!A4F2C1D0' silently never matched '!a4f2c1d0'."""
+        node_filter = NodeFilter(denylist=["!A4F2C1D0"])
+
+        assert node_filter.is_allowed("!a4f2c1d0") is False
+
+    def test_uppercase_lookup_is_blocked(self) -> None:
+        node_filter = NodeFilter(denylist=["!a4f2c1d0"])
+
+        assert node_filter.is_allowed("!A4F2C1D0") is False
+
+    def test_whitespace_is_trimmed(self) -> None:
+        node_filter = NodeFilter(allowlist=[" !abc123 "], require_allowlist=True)
+
+        assert node_filter.is_allowed("!abc123") is True
+
+    def test_allowlist_matches_case_insensitively(self) -> None:
+        node_filter = NodeFilter(allowlist=["!ABC123"], require_allowlist=True)
+
+        assert node_filter.is_allowed("!abc123") is True
+        assert node_filter.is_allowed("!other") is False

@@ -1,9 +1,11 @@
 """Plugin discovery and loading utilities."""
 
+import hashlib
 import importlib
 import importlib.util
 import inspect
 import logging
+import sys
 from pathlib import Path
 
 from meshgate.interfaces.plugin import Plugin
@@ -52,9 +54,9 @@ class PluginLoader:
             module = importlib.import_module(module_path)
             return self._find_and_instantiate_plugin(module, module_path)
         except ImportError as e:
-            raise PluginLoadError(f"Failed to import module '{module_path}': {e}")
+            raise PluginLoadError(f"Failed to import module '{module_path}': {e}") from e
         except Exception as e:
-            raise PluginLoadError(f"Failed to load plugin from '{module_path}': {e}")
+            raise PluginLoadError(f"Failed to load plugin from '{module_path}': {e}") from e
 
     def load_plugin_from_file(self, file_path: str | Path) -> Plugin:
         """Load a plugin from a Python file.
@@ -75,22 +77,32 @@ class PluginLoader:
         if not file_path.suffix == ".py":
             raise PluginLoadError(f"Plugin file must be a .py file: {file_path}")
 
-        try:
-            # Generate a unique module name from the file path
-            module_name = f"_plugin_{file_path.stem}"
+        # Derive the module name from the full path so two plugin files with
+        # the same stem in different directories don't collide.
+        resolved = file_path.resolve()
+        digest = hashlib.sha256(str(resolved).encode()).hexdigest()[:8]
+        module_name = f"_plugin_{resolved.stem}_{digest}"
 
-            spec = importlib.util.spec_from_file_location(module_name, file_path)
+        try:
+            spec = importlib.util.spec_from_file_location(module_name, resolved)
             if spec is None or spec.loader is None:
                 raise PluginLoadError(f"Could not load spec for: {file_path}")
 
             module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
+            # Register before executing: dataclasses and get_type_hints resolve
+            # annotations by looking the module up in sys.modules.
+            sys.modules[module_name] = module
+            try:
+                spec.loader.exec_module(module)
+            except BaseException:
+                sys.modules.pop(module_name, None)
+                raise
 
             return self._find_and_instantiate_plugin(module, str(file_path))
         except PluginLoadError:
             raise
         except Exception as e:
-            raise PluginLoadError(f"Failed to load plugin from '{file_path}': {e}")
+            raise PluginLoadError(f"Failed to load plugin from '{file_path}': {e}") from e
 
     def discover_plugins(self, directory: str | Path) -> list[Plugin]:
         """Discover and load all plugins in a directory.
@@ -149,6 +161,10 @@ class PluginLoader:
                 and issubclass(obj, Plugin)
                 and obj is not Plugin
                 and not inspect.isabstract(obj)
+                # dir() also lists imported names, so a plugin that imports
+                # another plugin would otherwise offer two candidates and be
+                # resolved by guesswork.
+                and obj.__module__ == module.__name__
             ):
                 plugin_classes.append(obj)
 
@@ -156,15 +172,11 @@ class PluginLoader:
             raise PluginLoadError(f"No Plugin subclass found in '{source}'")
 
         if len(plugin_classes) > 1:
-            # Use the first one that doesn't look like a base class
-            for cls in plugin_classes:
-                if not cls.__name__.startswith("Base"):
-                    plugin_class = cls
-                    break
-            else:
-                plugin_class = plugin_classes[0]
+            plugin_class = plugin_classes[0]
             logger.warning(
-                f"Multiple Plugin classes found in '{source}', using {plugin_class.__name__}"
+                f"Multiple Plugin classes found in '{source}' "
+                f"({', '.join(c.__name__ for c in plugin_classes)}), "
+                f"using {plugin_class.__name__}"
             )
         else:
             plugin_class = plugin_classes[0]
@@ -174,4 +186,4 @@ class PluginLoader:
         except Exception as e:
             raise PluginLoadError(
                 f"Failed to instantiate {plugin_class.__name__} from '{source}': {e}"
-            )
+            ) from e

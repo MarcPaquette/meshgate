@@ -76,12 +76,14 @@ class RateLimiter:
         oldest = timestamps[0]
         retry_after = (oldest + self._window_seconds) - now
 
-        logger.warning(
+        # Debug, not warning: a node over its limit keeps hitting this on every
+        # message, and one misbehaving node should not fill the disk.
+        logger.debug(
             f"Rate limit exceeded for node {node_id}: "
             f"{len(timestamps)}/{self._max_messages} in {self._window_seconds}s"
         )
 
-        return RateLimitResult(allowed=False, retry_after_seconds=max(0, retry_after))
+        return RateLimitResult(allowed=False, retry_after_seconds=max(0.0, retry_after))
 
     def cleanup_inactive(self, inactive_seconds: int = 300) -> int:
         """Remove tracking data for nodes that haven't sent messages recently.

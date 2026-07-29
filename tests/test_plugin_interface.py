@@ -143,15 +143,13 @@ class TestPluginResponse:
         assert resp.exit_plugin is True
 
 
+BUILTIN_PLUGINS = [GopherPlugin, LLMPlugin, WeatherPlugin, WikipediaPlugin]
+
+
 class TestBuiltinPluginMetadata:
     """Structural tests for all built-in plugin metadata."""
 
-    BUILTIN_PLUGINS = [GopherPlugin, LLMPlugin, WeatherPlugin, WikipediaPlugin]
-
-    @pytest.mark.parametrize(
-        "plugin_class",
-        [GopherPlugin, LLMPlugin, WeatherPlugin, WikipediaPlugin],
-    )
+    @pytest.mark.parametrize("plugin_class", BUILTIN_PLUGINS)
     def test_builtin_plugin_has_valid_metadata(self, plugin_class: type) -> None:
         """Test that each built-in plugin has structurally valid metadata."""
         plugin = plugin_class()
@@ -164,22 +162,16 @@ class TestBuiltinPluginMetadata:
 
     def test_builtin_plugins_have_unique_menu_numbers(self) -> None:
         """Test that all built-in plugins have unique menu numbers."""
-        menu_numbers = [cls().metadata.menu_number for cls in self.BUILTIN_PLUGINS]
+        menu_numbers = [cls().metadata.menu_number for cls in BUILTIN_PLUGINS]
         assert len(menu_numbers) == len(set(menu_numbers)), "Menu numbers must be unique"
 
-    @pytest.mark.parametrize(
-        "plugin_class",
-        [GopherPlugin, LLMPlugin, WeatherPlugin, WikipediaPlugin],
-    )
+    @pytest.mark.parametrize("plugin_class", BUILTIN_PLUGINS)
     def test_builtin_plugin_has_welcome_message(self, plugin_class: type) -> None:
         """Test that all built-in plugins have non-empty welcome messages."""
         plugin = plugin_class()
         assert plugin.get_welcome_message()
 
-    @pytest.mark.parametrize(
-        "plugin_class",
-        [GopherPlugin, LLMPlugin, WeatherPlugin, WikipediaPlugin],
-    )
+    @pytest.mark.parametrize("plugin_class", BUILTIN_PLUGINS)
     def test_builtin_plugin_has_help_text(self, plugin_class: type) -> None:
         """Test that all built-in plugins have non-empty help text."""
         plugin = plugin_class()

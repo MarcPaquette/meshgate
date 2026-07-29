@@ -14,7 +14,7 @@ class TestRateLimiter:
 
         for i in range(5):
             result = limiter.check("!node1")
-            assert result.allowed, f"Message {i+1} should be allowed"
+            assert result.allowed, f"Message {i + 1} should be allowed"
             assert result.retry_after_seconds is None
 
     def test_blocks_over_limit(self) -> None:

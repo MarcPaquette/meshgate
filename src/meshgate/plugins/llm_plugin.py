@@ -112,9 +112,7 @@ class LLMPlugin(HTTPPluginBase):
             plugin_state={"history": []},
         )
 
-    async def _handle_prompt(
-        self, prompt: str, history: list[dict[str, str]]
-    ) -> PluginResponse:
+    async def _handle_prompt(self, prompt: str, history: list[dict[str, str]]) -> PluginResponse:
         """Send prompt to Ollama and return response."""
         # Build messages with history
         messages = [{"role": "system", "content": self.SYSTEM_PROMPT}]

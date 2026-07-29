@@ -35,13 +35,22 @@ class MessageRouter:
         """
         self._registry = registry
         self._max_state_bytes = max_state_bytes
+        self._menu_cache: str | None = None
+        self._menu_cache_version = -1
 
     def _render_menu(self) -> str:
         """Render the main menu showing available plugins.
 
+        The result is cached against the registry version: the menu is static
+        after startup but is rebuilt on nearly every message otherwise.
+
         Returns:
             The formatted menu string
         """
+        version = self._registry.version
+        if self._menu_cache is not None and self._menu_cache_version == version:
+            return self._menu_cache
+
         lines = ["Available Services:"]
         for plugin in self._registry.get_all_plugins():
             meta = plugin.metadata
@@ -49,7 +58,10 @@ class MessageRouter:
 
         lines.append("")
         lines.append("Send number to select")
-        return "\n".join(lines)
+
+        self._menu_cache = "\n".join(lines)
+        self._menu_cache_version = version
+        return self._menu_cache
 
     async def route(self, message: str, session: Session, context: NodeContext) -> PluginResponse:
         """Route a message to the appropriate handler.

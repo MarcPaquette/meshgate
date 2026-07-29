@@ -11,8 +11,18 @@ uv run pytest tests/ -v          # Run all tests
 uv run pytest tests/path/test_file.py::TestClass::test_method -v  # Run single test
 uv run ruff check src/ tests/    # Lint code
 uv run ruff check src/ tests/ --fix  # Auto-fix lint issues
+uv run ruff format src/ tests/   # Format code
+uv run ruff format --check src/ tests/  # Verify formatting (CI gate)
 uv run pytest tests/ --cov=src/meshgate --cov-report=term-missing  # Coverage
 uv run python -m meshgate  # Run server
+```
+
+**Before pushing**, run the same three gates CI does (`.github/workflows/ci.yml`,
+matrix: Python 3.11 and 3.12) — `ruff format --check` is easy to miss and fails
+the build on its own:
+
+```bash
+uv run ruff check src/ tests/ && uv run ruff format --check src/ tests/ && uv run pytest tests/ -v
 ```
 
 ## Architecture Overview
@@ -37,6 +47,25 @@ IncomingMessage → HandlerServer → MessageRouter → Plugin.handle()
 - Owns the `PluginRegistry`, `SessionManager`, `MessageRouter`, `ContentChunker`
 - Accepts custom `MessageTransport` for testing (inject `MockTransport`)
 - Use `handle_single_message()` for testing without transport
+
+### Concurrency Model
+
+Messages are handled **concurrently across nodes but serialized per node**, so a
+slow plugin call (e.g. a 30s LLM request) cannot stall the rest of the mesh:
+
+- `_dispatch()` spawns a task per message, tracked in `_inflight` (strong refs —
+  asyncio only holds weak ones)
+- A global `asyncio.Semaphore` caps total in-flight handlers
+- A per-node `asyncio.Lock` keeps one node's messages ordered. **This is
+  required**: `Session` is a mutable dataclass with no locking, so overlapping
+  messages from one node would corrupt `plugin_state`
+- `stop()` waits `SHUTDOWN_GRACE_SECONDS` for in-flight work before cancelling,
+  so multi-chunk replies aren't truncated
+
+`MeshtasticTransport._on_receive` runs on **meshtastic's publishing thread**, not
+the event loop. `asyncio.Queue` is not thread-safe, so it hands messages over via
+`loop.call_soon_threadsafe()`. Radio sends use a dedicated single-thread executor
+so concurrent handlers can't interleave writes on the serial stream.
 
 **MessageRouter** (`core/message_router.py`) - Routes messages based on session state:
 - At menu: number → enters plugin, shows welcome
@@ -92,4 +121,4 @@ async def handle(self, message, context, plugin_state):
 
 ## Issue Tracking
 
-This project uses `bd` (beads) for issue tracking. See AGENTS.md for workflow.
+Use GitHub issues. See AGENTS.md for the session workflow.

@@ -205,3 +205,58 @@ meshtastic:
         assert config.meshtastic.device == "/dev/custom"
         assert config.meshtastic.tcp_host == "host.local"
         assert config.meshtastic.tcp_port == 1234
+
+
+class TestConfigErrorHandling:
+    """Bad config files should exit cleanly, not raise a traceback."""
+
+    def test_invalid_config_exits_cleanly(self) -> None:
+        """A validation failure should be reported, not raised."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "bad.yaml"
+            path.write_text("meshtastic:\n  connection_type: carrier-pigeon\n")
+
+            args = parse_args(["--config", str(path)])
+
+            with pytest.raises(SystemExit) as exc:
+                load_config(args)
+            assert exc.value.code == 1
+
+    def test_malformed_yaml_exits_cleanly(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "bad.yaml"
+            path.write_text("server:\n  max_message_size: 1\n")
+
+            args = parse_args(["--config", str(path)])
+
+            with pytest.raises(SystemExit):
+                load_config(args)
+
+    def test_valueless_section_loads(self) -> None:
+        """Regression: 'server:' with no body crashed on startup."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "c.yaml"
+            path.write_text("server:\nmeshtastic:\n  device: /dev/ttyUSB0\n")
+
+            config = load_config(parse_args(["--config", str(path)]))
+
+            assert config.meshtastic.device == "/dev/ttyUSB0"
+
+
+class TestPortOverride:
+    """Numeric overrides must not be dropped by a falsy check."""
+
+    def test_explicit_zero_port_is_rejected(self) -> None:
+        """Port 0 used to be silently dropped by a falsy check."""
+        args = parse_args(["--tcp-port", "0"])
+
+        with pytest.raises(SystemExit) as exc:
+            load_config(args)
+        assert exc.value.code == 1
+
+    def test_valid_port_override_applies(self) -> None:
+        args = parse_args(["--connection", "tcp", "--tcp-host", "h", "--tcp-port", "9999"])
+
+        config = load_config(args)
+
+        assert config.meshtastic.tcp_port == 9999

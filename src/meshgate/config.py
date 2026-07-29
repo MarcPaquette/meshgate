@@ -1,17 +1,34 @@
 """Configuration loading from YAML files."""
 
+import logging
+import os
+import tempfile
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Any, TypeVar
 
 import yaml
 
+logger = logging.getLogger(__name__)
+
 T = TypeVar("T")
 
 
-def _dataclass_from_dict(cls: type[T], data: dict[str, Any]) -> T:
-    """Create a dataclass instance from a dictionary, ignoring unknown keys."""
+def _dataclass_from_dict(cls: type[T], data: dict[str, Any] | None) -> T:
+    """Create a dataclass instance from a dictionary, ignoring unknown keys.
+
+    A YAML section with no body parses as None rather than an empty mapping,
+    so None is treated the same as {} (all defaults).
+    """
+    if not data:
+        return cls()
+
     valid = {f.name for f in fields(cls)}
+    unknown = set(data) - valid
+    if unknown:
+        # A typo in a security setting would otherwise be silently ignored,
+        # leaving the operator believing a protection is enabled.
+        logger.warning("Ignoring unknown %s keys: %s", cls.__name__, ", ".join(sorted(unknown)))
     return cls(**{k: v for k, v in data.items() if k in valid})
 
 
@@ -118,22 +135,79 @@ class Config:
         Returns:
             Config instance
         """
-        # Build nested plugin configs
-        plugins_data = data.get("plugins", {})
+        # `or {}` rather than a .get() default: a valueless YAML section
+        # ("server:") is present but parses as None, so the default never fires.
+        data = data or {}
+        plugins_data = data.get("plugins") or {}
         plugins = PluginsConfig(
-            gopher=_dataclass_from_dict(GopherConfig, plugins_data.get("gopher", {})),
-            llm=_dataclass_from_dict(LLMConfig, plugins_data.get("llm", {})),
-            weather=_dataclass_from_dict(WeatherConfig, plugins_data.get("weather", {})),
-            wikipedia=_dataclass_from_dict(WikipediaConfig, plugins_data.get("wikipedia", {})),
+            gopher=_dataclass_from_dict(GopherConfig, plugins_data.get("gopher")),
+            llm=_dataclass_from_dict(LLMConfig, plugins_data.get("llm")),
+            weather=_dataclass_from_dict(WeatherConfig, plugins_data.get("weather")),
+            wikipedia=_dataclass_from_dict(WikipediaConfig, plugins_data.get("wikipedia")),
         )
 
-        return cls(
-            server=_dataclass_from_dict(ServerConfig, data.get("server", {})),
-            meshtastic=_dataclass_from_dict(MeshtasticConfig, data.get("meshtastic", {})),
+        config = cls(
+            server=_dataclass_from_dict(ServerConfig, data.get("server")),
+            meshtastic=_dataclass_from_dict(MeshtasticConfig, data.get("meshtastic")),
             plugins=plugins,
-            security=_dataclass_from_dict(SecurityConfig, data.get("security", {})),
-            plugin_paths=data.get("plugin_paths", []),
+            security=_dataclass_from_dict(SecurityConfig, data.get("security")),
+            plugin_paths=data.get("plugin_paths") or [],
         )
+        config.validate()
+        return config
+
+    def validate(self) -> None:
+        """Check values that would otherwise fail deep inside runtime code.
+
+        Raises:
+            ValueError: If any setting is out of range or unrecognized
+        """
+        errors = []
+
+        valid_connections = {"serial", "tcp", "ble"}
+        if self.meshtastic.connection_type not in valid_connections:
+            errors.append(
+                f"meshtastic.connection_type must be one of "
+                f"{sorted(valid_connections)}, got {self.meshtastic.connection_type!r}"
+            )
+        if not 1 <= self.meshtastic.tcp_port <= 65535:
+            errors.append(f"meshtastic.tcp_port must be 1-65535, got {self.meshtastic.tcp_port}")
+
+        if self.server.max_message_size < 20:
+            errors.append(
+                f"server.max_message_size must be at least 20, got {self.server.max_message_size}"
+            )
+        if self.server.session_timeout_minutes <= 0:
+            errors.append(
+                f"server.session_timeout_minutes must be positive, "
+                f"got {self.server.session_timeout_minutes}"
+            )
+        if self.server.session_cleanup_interval_minutes <= 0:
+            errors.append(
+                f"server.session_cleanup_interval_minutes must be positive, "
+                f"got {self.server.session_cleanup_interval_minutes}"
+            )
+
+        # A window of 0 would make every check reject permanently.
+        if self.security.rate_limit_messages <= 0:
+            errors.append(
+                f"security.rate_limit_messages must be positive, "
+                f"got {self.security.rate_limit_messages}"
+            )
+        if self.security.rate_limit_window_seconds <= 0:
+            errors.append(
+                f"security.rate_limit_window_seconds must be positive, "
+                f"got {self.security.rate_limit_window_seconds}"
+            )
+
+        if errors:
+            raise ValueError("Invalid configuration:\n  - " + "\n  - ".join(errors))
+
+        if self.security.require_allowlist and not self.security.node_allowlist:
+            logger.warning(
+                "security.require_allowlist is set with an empty node_allowlist - "
+                "all traffic will be rejected"
+            )
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> "Config":
@@ -178,5 +252,15 @@ class Config:
             path: Path to save configuration
         """
         path = Path(path)
-        with open(path, "w") as f:
-            yaml.safe_dump(self.to_dict(), f, default_flow_style=False)
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Write to a temp file in the same directory, then rename, so a crash
+        # mid-write can't truncate an existing config.
+        fd, tmp_path = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w") as f:
+                yaml.safe_dump(self.to_dict(), f, default_flow_style=False)
+            os.replace(tmp_path, path)
+        except BaseException:
+            Path(tmp_path).unlink(missing_ok=True)
+            raise

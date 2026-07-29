@@ -3,6 +3,7 @@
 import argparse
 import asyncio
 import logging
+import signal
 import sys
 from pathlib import Path
 
@@ -18,7 +19,9 @@ def setup_logging(verbose: bool = False) -> None:
     """
     level = logging.DEBUG if verbose else logging.INFO
     format_str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    logging.basicConfig(level=level, format=format_str)
+    # force=True: basicConfig is a no-op if anything already configured the
+    # root logger, which would silently make -v do nothing.
+    logging.basicConfig(level=level, format=format_str, force=True)
 
 
 def parse_args(args: list[str] | None = None) -> argparse.Namespace:
@@ -99,11 +102,16 @@ def load_config(args: argparse.Namespace) -> Config:
     """
     # Load base configuration
     if args.config:
-        config_path = Path(args.config)
-        if not config_path.exists():
-            print(f"Error: Configuration file not found: {config_path}", file=sys.stderr)
+        # No exists() pre-check: it would double-stat and leave a window where
+        # the file can vanish, turning a clean exit into a traceback.
+        try:
+            config = Config.from_yaml(Path(args.config))
+        except FileNotFoundError:
+            print(f"Error: Configuration file not found: {args.config}", file=sys.stderr)
             sys.exit(1)
-        config = Config.from_yaml(config_path)
+        except (ValueError, OSError) as e:
+            print(f"Error: Invalid configuration: {e}", file=sys.stderr)
+            sys.exit(1)
     else:
         # Check for default config locations
         default_paths = [
@@ -113,21 +121,35 @@ def load_config(args: argparse.Namespace) -> Config:
         ]
         config = None
         for path in default_paths:
-            if path.exists():
+            try:
                 config = Config.from_yaml(path)
                 break
+            except FileNotFoundError:
+                continue
+            except (ValueError, OSError) as e:
+                print(f"Error: Invalid configuration in {path}: {e}", file=sys.stderr)
+                sys.exit(1)
         if config is None:
             config = Config.default()
 
-    # Apply CLI overrides
-    if args.connection:
+    # Apply CLI overrides. `is not None` rather than truthiness: argparse
+    # defaults these to None, and --tcp-port 0 is a real (if unusual) value.
+    if args.connection is not None:
         config.meshtastic.connection_type = args.connection
-    if args.device:
+    if args.device is not None:
         config.meshtastic.device = args.device
-    if args.tcp_host:
+    if args.tcp_host is not None:
         config.meshtastic.tcp_host = args.tcp_host
-    if args.tcp_port:
+    if args.tcp_port is not None:
         config.meshtastic.tcp_port = args.tcp_port
+
+    # Re-validate: overrides bypass the checks run at load time. Reported the
+    # same way as a bad file, rather than as a traceback.
+    try:
+        config.validate()
+    except ValueError as e:
+        print(f"Error: Invalid configuration: {e}", file=sys.stderr)
+        sys.exit(1)
 
     return config
 
@@ -140,9 +162,23 @@ async def run_server(config: Config) -> None:
     """
     server = HandlerServer(config=config)
 
+    # Under systemd or Docker the process is stopped with SIGTERM, which would
+    # otherwise kill it without ever closing the serial interface.
+    loop = asyncio.get_running_loop()
+    server_task = asyncio.ensure_future(server.start())
+    for signame in ("SIGTERM", "SIGINT"):
+        sig = getattr(signal, signame, None)
+        if sig is None:
+            continue
+        try:
+            loop.add_signal_handler(sig, server_task.cancel)
+        except NotImplementedError:
+            # Not supported on this platform (e.g. Windows)
+            pass
+
     try:
-        await server.start()
-    except KeyboardInterrupt:
+        await server_task
+    except (KeyboardInterrupt, asyncio.CancelledError):
         print("\nShutting down...")
     except Exception as e:
         logging.error(f"Server error: {e}")

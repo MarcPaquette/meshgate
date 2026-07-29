@@ -1,9 +1,27 @@
 """Session dataclass for tracking per-node state."""
 
+import json
 import sys
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
+
+
+def _state_size_bytes(state: dict[str, Any]) -> int:
+    """Measure the serialized size of plugin state.
+
+    sys.getsizeof is shallow - for {"history": [...]} it reports the dict plus
+    the list's pointer array and ignores the contents entirely, under-reporting
+    real payloads by orders of magnitude. Plugin state is JSON-shaped by
+    construction, so serializing it is both accurate and cheap enough.
+    """
+    try:
+        return len(json.dumps(state, default=str).encode("utf-8"))
+    except (TypeError, ValueError, RecursionError):
+        # Unmeasurable state (e.g. circular references) is reported as
+        # oversized so it is rejected rather than silently let through.
+        return sys.maxsize
 
 
 @dataclass
@@ -24,6 +42,10 @@ class Session:
     active_plugin: str | None = None
     plugin_state: dict[str, Any] = field(default_factory=dict)
     last_activity: datetime = field(default_factory=datetime.now)
+    # Elapsed-time comparisons use a monotonic clock: wall-clock deltas go
+    # negative across a DST fall-back or an NTP step, which would either keep
+    # sessions alive forever or expire them all at once.
+    last_activity_monotonic: float = field(default_factory=time.monotonic)
 
     def __post_init__(self) -> None:
         """Validate session."""
@@ -31,8 +53,13 @@ class Session:
             raise ValueError("node_id cannot be empty")
 
     def update_activity(self) -> None:
-        """Update the last activity timestamp."""
+        """Update the last activity timestamps."""
         self.last_activity = datetime.now()
+        self.last_activity_monotonic = time.monotonic()
+
+    def idle_seconds(self) -> float:
+        """Seconds since this session was last active."""
+        return time.monotonic() - self.last_activity_monotonic
 
     def enter_plugin(self, plugin_name: str) -> None:
         """Enter a plugin, clearing any previous plugin state.
@@ -61,13 +88,14 @@ class Session:
             True if update succeeded, False if state would exceed limit
         """
         if max_bytes > 0:
-            # Calculate size of merged state
             merged = {**self.plugin_state, **state}
-            size = sys.getsizeof(merged) + sum(sys.getsizeof(v) for v in merged.values())
-            if size > max_bytes:
+            if _state_size_bytes(merged) > max_bytes:
                 return False
+            # Reuse the merged dict rather than merging a second time.
+            self.plugin_state = merged
+        else:
+            self.plugin_state.update(state)
 
-        self.plugin_state.update(state)
         self.update_activity()
         return True
 
