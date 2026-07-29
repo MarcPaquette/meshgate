@@ -112,9 +112,7 @@ class TestLLMPlugin:
 
         # Start with long history
         long_history = [{"role": "user", "content": f"msg{i}"} for i in range(20)]
-        response = await plugin.handle(
-            "New message", context, {"history": long_history}
-        )
+        response = await plugin.handle("New message", context, {"history": long_history})
 
         # History should be trimmed to the configured max
         assert len(response.plugin_state["history"]) <= LLMPlugin.MAX_HISTORY_MESSAGES

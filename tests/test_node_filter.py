@@ -33,9 +33,7 @@ class TestNodeFilter:
 
     def test_require_allowlist_restricts_access(self) -> None:
         """Test that require_allowlist only allows listed nodes."""
-        node_filter = NodeFilter(
-            allowlist=["!allowed1", "!allowed2"], require_allowlist=True
-        )
+        node_filter = NodeFilter(allowlist=["!allowed1", "!allowed2"], require_allowlist=True)
 
         assert node_filter.is_allowed("!allowed1")
         assert node_filter.is_allowed("!allowed2")

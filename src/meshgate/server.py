@@ -130,9 +130,7 @@ class HandlerServer:
         plugins_cfg = self._config.plugins
 
         # Gopher only uses root_directory (allow_escape is unused)
-        self._registry.register(
-            GopherPlugin(root_directory=plugins_cfg.gopher.root_directory)
-        )
+        self._registry.register(GopherPlugin(root_directory=plugins_cfg.gopher.root_directory))
         # LLM, Weather, Wikipedia configs map directly to plugin constructors
         self._registry.register(LLMPlugin(**asdict(plugins_cfg.llm)))
         self._registry.register(WeatherPlugin(**asdict(plugins_cfg.weather)))
@@ -174,9 +172,7 @@ class HandlerServer:
                     )
                 except ValueError as e:
                     # Registration failed (duplicate name or menu number)
-                    logger.warning(
-                        f"Failed to register plugin '{plugin.metadata.name}': {e}"
-                    )
+                    logger.warning(f"Failed to register plugin '{plugin.metadata.name}': {e}")
 
         if loaded_count > 0:
             logger.info(f"Loaded {loaded_count} external plugins")
@@ -247,9 +243,7 @@ class HandlerServer:
         # reply already going out is not truncated mid-send.
         if self._inflight:
             pending = list(self._inflight)
-            done, still_running = await asyncio.wait(
-                pending, timeout=self.SHUTDOWN_GRACE_SECONDS
-            )
+            done, still_running = await asyncio.wait(pending, timeout=self.SHUTDOWN_GRACE_SECONDS)
             for task in still_running:
                 task.cancel()
             if still_running:
@@ -288,9 +282,7 @@ class HandlerServer:
                     # Clean up inactive rate limiter data
                     rate_removed = self._rate_limiter.cleanup_inactive()
                     if rate_removed > 0:
-                        logger.debug(
-                            f"Cleaned up rate limit data for {rate_removed} nodes"
-                        )
+                        logger.debug(f"Cleaned up rate limit data for {rate_removed} nodes")
 
                     # Drop per-node locks that nobody is holding or waiting on,
                     # otherwise the dict grows one entry per node seen.
@@ -326,9 +318,7 @@ class HandlerServer:
                 # duty-cycle-limited half-duplex mesh.
                 if self._should_notify_rate_limit(node_id):
                     retry_seconds = int(rate_result.retry_after_seconds or 0)
-                    await self._send_response(
-                        node_id, f"Rate limited. Try in {retry_seconds}s"
-                    )
+                    await self._send_response(node_id, f"Rate limited. Try in {retry_seconds}s")
                 return
 
             # Get or create session
@@ -352,9 +342,7 @@ class HandlerServer:
             # Send a fixed string, never the exception text: it is unbounded
             # in length and can expose internal URLs and paths.
             try:
-                await self._send_response(
-                    incoming.context.node_id, "Sorry, something went wrong."
-                )
+                await self._send_response(incoming.context.node_id, "Sorry, something went wrong.")
             except Exception:
                 pass
 

@@ -251,9 +251,7 @@ class TestHandlerServerCleanup:
         assert not server.is_running
 
     @pytest.mark.asyncio
-    async def test_max_sessions_enforced(
-        self, mock_transport: MockTransport
-    ) -> None:
+    async def test_max_sessions_enforced(self, mock_transport: MockTransport) -> None:
         """Test that max_sessions config is enforced behaviorally."""
         config = Config.default()
         config.server.max_sessions = 2
@@ -299,9 +297,7 @@ class TestHandlerServerRateLimiting:
         assert len(rate_limit_msgs) >= 1
 
     @pytest.mark.asyncio
-    async def test_rate_limit_disabled_allows_all(
-        self, mock_transport: MockTransport
-    ) -> None:
+    async def test_rate_limit_disabled_allows_all(self, mock_transport: MockTransport) -> None:
         """Test that disabled rate limiting allows all messages."""
         config = Config.default()
         config.security.rate_limit_enabled = False
@@ -337,9 +333,7 @@ class TestHandlerServerExternalPlugins:
         plugins_dir.mkdir()
         return plugins_dir
 
-    def test_default_config_disables_external_plugins(
-        self, mock_transport: MockTransport
-    ) -> None:
+    def test_default_config_disables_external_plugins(self, mock_transport: MockTransport) -> None:
         """Default config should not load external plugins."""
         config = Config.default()
         assert config.plugin_paths == []

@@ -278,9 +278,9 @@ class TestTitleEncoding:
         self, plugin: WikipediaPlugin, context: NodeContext
     ) -> None:
         """Regression: 'AC/DC' became an extra path segment and 404'd."""
-        route = respx.get(
-            "https://en.wikipedia.org/api/rest_v1/page/summary/AC%2FDC"
-        ).mock(return_value=Response(200, json={"title": "AC/DC", "extract": "Band."}))
+        route = respx.get("https://en.wikipedia.org/api/rest_v1/page/summary/AC%2FDC").mock(
+            return_value=Response(200, json={"title": "AC/DC", "extract": "Band."})
+        )
 
         response = await plugin.handle("1", context, {"last_results": ["AC/DC"]})
 
@@ -292,9 +292,9 @@ class TestTitleEncoding:
     async def test_question_mark_in_title_is_escaped(
         self, plugin: WikipediaPlugin, context: NodeContext
     ) -> None:
-        route = respx.get(
-            "https://en.wikipedia.org/api/rest_v1/page/summary/Who%3F"
-        ).mock(return_value=Response(200, json={"title": "Who?", "extract": "Band."}))
+        route = respx.get("https://en.wikipedia.org/api/rest_v1/page/summary/Who%3F").mock(
+            return_value=Response(200, json={"title": "Who?", "extract": "Band."})
+        )
 
         await plugin.handle("1", context, {"last_results": ["Who?"]})
 

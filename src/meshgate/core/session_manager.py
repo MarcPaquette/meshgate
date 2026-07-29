@@ -24,9 +24,7 @@ class SessionManager:
         Node !xyz → sends "!exit" → returns to menu (abc unaffected)
     """
 
-    def __init__(
-        self, session_timeout_minutes: int = 60, max_sessions: int = 0
-    ) -> None:
+    def __init__(self, session_timeout_minutes: int = 60, max_sessions: int = 0) -> None:
         """Initialize the session manager.
 
         Args:

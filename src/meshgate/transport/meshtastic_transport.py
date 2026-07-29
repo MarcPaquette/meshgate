@@ -55,9 +55,7 @@ class MeshtasticTransport(MessageTransport):
         self._connected = False
         # Bounded, so a burst while a slow plugin call is in flight drops the
         # excess instead of growing without limit.
-        self._message_queue: asyncio.Queue[IncomingMessage] = asyncio.Queue(
-            maxsize=max_queue_size
-        )
+        self._message_queue: asyncio.Queue[IncomingMessage] = asyncio.Queue(maxsize=max_queue_size)
         # Captured at connect(): _on_receive runs on meshtastic's publishing
         # thread and needs the loop to hand messages over safely.
         self._loop: asyncio.AbstractEventLoop | None = None

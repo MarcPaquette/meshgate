@@ -69,9 +69,7 @@ class TestGopherPlugin:
                 break
 
         assert folder_num is not None, "folder1/ not found in menu listing"
-        response = await plugin.handle(
-            folder_num, context, {"current_path": str(temp_gopher_dir)}
-        )
+        response = await plugin.handle(folder_num, context, {"current_path": str(temp_gopher_dir)})
         assert "/folder1" in response.message
         assert "nested.txt" in response.message
 
@@ -92,9 +90,7 @@ class TestGopherPlugin:
                 break
 
         assert file_num is not None, "file1.txt not found in menu listing"
-        response = await plugin.handle(
-            file_num, context, {"current_path": str(temp_gopher_dir)}
-        )
+        response = await plugin.handle(file_num, context, {"current_path": str(temp_gopher_dir)})
         assert "Content of file 1" in response.message
 
     @pytest.mark.asyncio
@@ -183,11 +179,7 @@ class TestRootContainment:
     ) -> None:
         """Regression: the escaping file was served before the check ran."""
         listing = await rooted.handle("!home", context, {})
-        items = [
-            line.split(". ", 1)[1]
-            for line in listing.message.splitlines()
-            if ". " in line
-        ]
+        items = [line.split(". ", 1)[1] for line in listing.message.splitlines() if ". " in line]
         index = items.index("escape.txt") + 1
 
         response = await rooted.handle(str(index), context, listing.plugin_state)
@@ -218,11 +210,7 @@ class TestRootContainment:
     ) -> None:
         """The containment check must not block legitimate content."""
         listing = await rooted.handle("!home", context, {})
-        items = [
-            line.split(". ", 1)[1]
-            for line in listing.message.splitlines()
-            if ". " in line
-        ]
+        items = [line.split(". ", 1)[1] for line in listing.message.splitlines() if ". " in line]
         index = items.index("inside.txt") + 1
 
         response = await rooted.handle(str(index), context, listing.plugin_state)

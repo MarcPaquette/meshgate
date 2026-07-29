@@ -28,9 +28,7 @@ def _dataclass_from_dict(cls: type[T], data: dict[str, Any] | None) -> T:
     if unknown:
         # A typo in a security setting would otherwise be silently ignored,
         # leaving the operator believing a protection is enabled.
-        logger.warning(
-            "Ignoring unknown %s keys: %s", cls.__name__, ", ".join(sorted(unknown))
-        )
+        logger.warning("Ignoring unknown %s keys: %s", cls.__name__, ", ".join(sorted(unknown)))
     return cls(**{k: v for k, v in data.items() if k in valid})
 
 

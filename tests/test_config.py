@@ -250,9 +250,7 @@ class TestConfigEmptySections:
 
     def test_all_sections_valueless(self) -> None:
         """Every section header present but empty should still load."""
-        data = yaml.safe_load(
-            "server:\nmeshtastic:\nsecurity:\nplugins:\nplugin_paths:\n"
-        )
+        data = yaml.safe_load("server:\nmeshtastic:\nsecurity:\nplugins:\nplugin_paths:\n")
 
         config = Config.from_dict(data)
 

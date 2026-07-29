@@ -30,9 +30,7 @@ class SlowPlugin(Plugin):
 
     @property
     def metadata(self) -> PluginMetadata:
-        return PluginMetadata(
-            name="Slow", description="Slow plugin", menu_number=1, commands=()
-        )
+        return PluginMetadata(name="Slow", description="Slow plugin", menu_number=1, commands=())
 
     def get_welcome_message(self) -> str:
         return "slow ready"

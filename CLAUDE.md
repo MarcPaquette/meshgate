@@ -11,8 +11,18 @@ uv run pytest tests/ -v          # Run all tests
 uv run pytest tests/path/test_file.py::TestClass::test_method -v  # Run single test
 uv run ruff check src/ tests/    # Lint code
 uv run ruff check src/ tests/ --fix  # Auto-fix lint issues
+uv run ruff format src/ tests/   # Format code
+uv run ruff format --check src/ tests/  # Verify formatting (CI gate)
 uv run pytest tests/ --cov=src/meshgate --cov-report=term-missing  # Coverage
 uv run python -m meshgate  # Run server
+```
+
+**Before pushing**, run the same three gates CI does (`.github/workflows/ci.yml`,
+matrix: Python 3.11 and 3.12) — `ruff format --check` is easy to miss and fails
+the build on its own:
+
+```bash
+uv run ruff check src/ tests/ && uv run ruff format --check src/ tests/ && uv run pytest tests/ -v
 ```
 
 ## Architecture Overview

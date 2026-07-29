@@ -88,9 +88,7 @@ class ClosablePlugin(HTTPPluginBase):
 
     @property
     def metadata(self) -> PluginMetadata:
-        return PluginMetadata(
-            name="Closable", description="d", menu_number=1, commands=()
-        )
+        return PluginMetadata(name="Closable", description="d", menu_number=1, commands=())
 
     def get_welcome_message(self) -> str:
         return "hi"
@@ -113,9 +111,7 @@ class ExplodingPlugin(Plugin):
 
     @property
     def metadata(self) -> PluginMetadata:
-        return PluginMetadata(
-            name="Exploding", description="d", menu_number=2, commands=()
-        )
+        return PluginMetadata(name="Exploding", description="d", menu_number=2, commands=())
 
     def get_welcome_message(self) -> str:
         return "hi"

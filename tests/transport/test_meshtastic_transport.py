@@ -31,7 +31,10 @@ class FakeInterface:
 
     # Name and signature mirror the meshtastic library's camelCase API.
     def sendText(  # noqa: N802
-        self, text: str, destinationId: str, wantAck: bool = False  # noqa: N803
+        self,
+        text: str,
+        destinationId: str,  # noqa: N803
+        wantAck: bool = False,  # noqa: N803
     ) -> None:
         if self.send_error is not None:
             raise self.send_error
@@ -92,9 +95,7 @@ class TestConnect:
             lambda **kw: created.append(FakeInterface(**kw)) or created[-1],
         )
 
-        transport = MeshtasticTransport(
-            connection_type="tcp", tcp_host="10.0.0.5", tcp_port=4403
-        )
+        transport = MeshtasticTransport(connection_type="tcp", tcp_host="10.0.0.5", tcp_port=4403)
         await transport.connect()
 
         assert transport.is_connected
@@ -140,9 +141,7 @@ class TestSendMessage:
         await transport.connect()
 
         assert await transport.send_message("!dest", "hi") is True
-        assert fake_serial[0].sent == [
-            {"text": "hi", "destinationId": "!dest", "wantAck": True}
-        ]
+        assert fake_serial[0].sent == [{"text": "hi", "destinationId": "!dest", "wantAck": True}]
 
     async def test_send_when_not_connected(self) -> None:
         transport = MeshtasticTransport()
@@ -175,9 +174,7 @@ class TestOnReceive:
         assert message.text == "hello"
         assert message.context.node_id == "!abc123"
 
-    async def test_ignores_empty_text_and_missing_sender(
-        self, fake_serial, fake_pubsub
-    ) -> None:
+    async def test_ignores_empty_text_and_missing_sender(self, fake_serial, fake_pubsub) -> None:
         transport = await self._connected()
 
         transport._on_receive({"decoded": {"text": ""}, "fromId": "!abc"}, None)
