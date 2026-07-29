@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Meshgate Dashboard</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <h1>Meshgate</h1>
+    <div id="status-bar" class="status-bar">
+      <span class="pill" id="pill-running">&hellip;</span>
+      <span class="pill" id="pill-transport">&hellip;</span>
+      <span class="pill" id="pill-sessions">&hellip;</span>
+      <span class="pill" id="pill-plugins">&hellip;</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel" id="panel-plugins">
+      <h2>Plugins</h2>
+      <div id="plugins-body" class="panel-body">
+        <p class="muted">Loading&hellip;</p>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-sessions">
+      <h2>Sessions</h2>
+      <div id="sessions-body" class="panel-body">
+        <p class="muted">Loading&hellip;</p>
+      </div>
+    </section>
+
+    <section class="panel panel-wide" id="panel-detail">
+      <h2>
+        Session detail
+        <span id="detail-node" class="subtle"></span>
+      </h2>
+      <div id="detail-body" class="panel-body">
+        <p class="muted">Select a session to see its state and transcript.</p>
+      </div>
+    </section>
+
+    <section class="panel panel-wide" id="panel-logs">
+      <h2>
+        System log
+        <label class="follow"><input type="checkbox" id="log-follow" checked> follow</label>
+      </h2>
+      <div id="logs-body" class="panel-body log-stream">
+        <p class="muted">Loading&hellip;</p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span id="error-banner" class="error hidden"></span>
+    <span class="muted" id="last-update"></span>
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

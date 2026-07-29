@@ -7,6 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 uv sync                          # Install dependencies
 uv sync --extra dev              # Install with dev dependencies
+uv sync --extra web              # Install with web dashboard (fastapi, uvicorn)
 uv run pytest tests/ -v          # Run all tests
 uv run pytest tests/path/test_file.py::TestClass::test_method -v  # Run single test
 uv run ruff check src/ tests/    # Lint code
@@ -66,6 +67,35 @@ slow plugin call (e.g. a 30s LLM request) cannot stall the rest of the mesh:
 the event loop. `asyncio.Queue` is not thread-safe, so it hands messages over via
 `loop.call_soon_threadsafe()`. Radio sends use a dedicated single-thread executor
 so concurrent handlers can't interleave writes on the serial stream.
+
+### Web Dashboard (`web/`, optional)
+
+Opt-in (`web.enabled`), needs the `web` extra. Runs as a peer asyncio task started
+in `cli.run_server`, sharing the gateway's loop; `meshgate.web` is imported lazily
+so the extra isn't required when disabled.
+
+**Two constraints when touching `web/routes.py`:**
+
+- **Never call a mutating accessor from a read path.**
+  `SessionManager.get_session()` *creates* a session, refreshes its activity, and
+  reorders the LRU — a dashboard calling it invents sessions just by rendering.
+  Use `get_existing_session()` / `list_sessions()`. `RateLimiter.check()` likewise
+  records a request; use its read-only properties. `tests/web/test_readonly.py`
+  pins this.
+- **Stay on the event loop.** Handlers read the same unlocked dicts the message
+  path mutates. No thread offloading.
+
+`list_sessions()` returns live mutable references — the Pydantic models in
+`web/models.py` snapshot them immediately rather than holding them across an await.
+
+Data the dashboard shows that the gateway didn't previously keep:
+- `core/log_buffer.py` — `RingBufferHandler`, attached via `cli.attach_log_buffer()`,
+  reachable through `get_active_buffer()`
+- `core/transcript.py` — `TranscriptRecorder`, captured in
+  `HandlerServer._handle_message` *after* the rate-limit check
+
+`web/security.py` applies a `Host` check and a custom-header requirement on
+mutations; there is deliberately no CORS middleware.
 
 **MessageRouter** (`core/message_router.py`) - Routes messages based on session state:
 - At menu: number → enters plugin, shows welcome

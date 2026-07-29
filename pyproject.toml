@@ -25,12 +25,20 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Web dashboard. Optional so the core gateway keeps its three runtime deps.
+web = [
+    "fastapi>=0.110",
+    "uvicorn>=0.27",
+]
 dev = [
     "pytest>=7.0",
     "pytest-asyncio>=0.21",
     "pytest-cov>=7.0.0",
     "ruff>=0.1",
     "respx>=0.21",
+    # The dashboard tests need the web extra available.
+    "fastapi>=0.110",
+    "uvicorn>=0.27",
 ]
 
 [project.scripts]
