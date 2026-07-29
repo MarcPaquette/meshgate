@@ -8,7 +8,10 @@ import sys
 from pathlib import Path
 
 from meshgate.config import Config
+from meshgate.core.log_buffer import RingBufferHandler, set_active_buffer
 from meshgate.server import HandlerServer
+
+logger = logging.getLogger(__name__)
 
 
 def setup_logging(verbose: bool = False) -> None:
@@ -22,6 +25,28 @@ def setup_logging(verbose: bool = False) -> None:
     # force=True: basicConfig is a no-op if anything already configured the
     # root logger, which would silently make -v do nothing.
     logging.basicConfig(level=level, format=format_str, force=True)
+
+
+def attach_log_buffer(capacity: int) -> RingBufferHandler:
+    """Attach an in-memory log buffer to the root logger.
+
+    Added alongside the existing stderr handler rather than replacing it, so
+    console output is unchanged. Kept separate from setup_logging so it can be
+    attached after the config is read without re-running basicConfig, which
+    would tear down the handler already in place.
+
+    Args:
+        capacity: Number of recent records to retain
+
+    Returns:
+        The attached handler
+    """
+    root = logging.getLogger()
+    buffer = RingBufferHandler(capacity=capacity)
+    buffer.setLevel(root.level)
+    root.addHandler(buffer)
+    set_active_buffer(buffer)
+    return buffer
 
 
 def parse_args(args: list[str] | None = None) -> argparse.Namespace:
@@ -179,9 +204,10 @@ async def run_server(config: Config) -> None:
     try:
         await server_task
     except (KeyboardInterrupt, asyncio.CancelledError):
-        print("\nShutting down...")
+        # Through the logger, not print(), so it reaches the dashboard too.
+        logger.info("Shutting down...")
     except Exception as e:
-        logging.error(f"Server error: {e}")
+        logger.error(f"Server error: {e}")
         sys.exit(1)
     finally:
         await server.stop()
@@ -194,9 +220,14 @@ def main(args: list[str] | None = None) -> None:
         args: Command-line arguments (defaults to sys.argv)
     """
     parsed_args = parse_args(args)
+    # Logging is configured before the config is read so load errors are
+    # visible; the buffer is sized from config once it is available.
     setup_logging(verbose=parsed_args.verbose)
 
     config = load_config(parsed_args)
+
+    if config.web.enabled:
+        attach_log_buffer(config.web.log_buffer_size)
 
     try:
         asyncio.run(run_server(config))

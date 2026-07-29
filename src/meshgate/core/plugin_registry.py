@@ -18,6 +18,10 @@ class PluginRegistry:
         # dataclass on every access, so re-reading it during unregister could
         # desynchronize the two indexes if it ever changed.
         self._name_to_menu: dict[str, int] = {}
+        # Plugins that have been disabled at runtime. The instance is kept so
+        # re-enabling does not reconstruct it - construction can have side
+        # effects (GopherPlugin creates its root directory).
+        self._disabled: dict[str, Plugin] = {}
         self._sorted_cache: list[Plugin] | None = None
         # Bumped on every change so dependents can cache derived values.
         self._version = 0
@@ -34,7 +38,7 @@ class PluginRegistry:
         name = plugin.metadata.name
         menu_number = plugin.metadata.menu_number
 
-        if name in self._plugins:
+        if name in self._plugins or name in self._disabled:
             raise ValueError(f"Plugin '{name}' is already registered")
         if menu_number in self._menu_index:
             existing = self._menu_index[menu_number]
@@ -46,7 +50,7 @@ class PluginRegistry:
         self._invalidate()
 
     def unregister(self, name: str) -> bool:
-        """Unregister a plugin by name.
+        """Unregister a plugin by name, whether it is enabled or disabled.
 
         Args:
             name: The plugin name to unregister
@@ -54,15 +58,68 @@ class PluginRegistry:
         Returns:
             True if plugin was unregistered, False if it wasn't registered
         """
-        if name not in self._plugins:
+        if name not in self._plugins and name not in self._disabled:
             return False
 
-        del self._plugins[name]
+        self._plugins.pop(name, None)
+        self._disabled.pop(name, None)
         menu_number = self._name_to_menu.pop(name, None)
         if menu_number is not None:
             self._menu_index.pop(menu_number, None)
         self._invalidate()
         return True
+
+    def disable(self, name: str) -> bool:
+        """Disable a registered plugin without discarding it.
+
+        The plugin stops appearing in the menu and stops being routable, but
+        its menu number stays reserved so nothing else can claim it and
+        re-enabling cannot collide.
+
+        Args:
+            name: The plugin name to disable
+
+        Returns:
+            True if the plugin was disabled, False if it wasn't enabled
+        """
+        plugin = self._plugins.pop(name, None)
+        if plugin is None:
+            return False
+
+        self._disabled[name] = plugin
+        self._invalidate()
+        return True
+
+    def enable(self, name: str) -> bool:
+        """Re-enable a previously disabled plugin.
+
+        Args:
+            name: The plugin name to enable
+
+        Returns:
+            True if the plugin was enabled, False if it wasn't disabled
+        """
+        plugin = self._disabled.pop(name, None)
+        if plugin is None:
+            return False
+
+        self._plugins[name] = plugin
+        self._invalidate()
+        return True
+
+    def is_disabled(self, name: str) -> bool:
+        """Check whether a plugin is registered but disabled."""
+        return name in self._disabled
+
+    def list_all(self) -> list[tuple[Plugin, bool]]:
+        """Get every known plugin with its enabled state.
+
+        Returns:
+            List of (plugin, enabled) sorted by menu number
+        """
+        combined = [(p, True) for p in self._plugins.values()]
+        combined += [(p, False) for p in self._disabled.values()]
+        return sorted(combined, key=lambda pair: self._name_to_menu[pair[0].metadata.name])
 
     def _invalidate(self) -> None:
         """Drop cached derived state after a change."""
@@ -116,9 +173,14 @@ class PluginRegistry:
 
     @property
     def plugin_count(self) -> int:
-        """Get the number of registered plugins."""
+        """Get the number of enabled plugins."""
         return len(self._plugins)
 
+    @property
+    def disabled_count(self) -> int:
+        """Get the number of registered but disabled plugins."""
+        return len(self._disabled)
+
     def __contains__(self, name: str) -> bool:
-        """Check if a plugin is registered by name."""
+        """Check if a plugin is registered and enabled by name."""
         return name in self._plugins

@@ -57,6 +57,7 @@ class MeshtasticConfig:
 class GopherConfig:
     """Gopher plugin configuration."""
 
+    enabled: bool = True
     root_directory: str = "./gopher_content"
     allow_escape: bool = False
 
@@ -65,6 +66,7 @@ class GopherConfig:
 class LLMConfig:
     """LLM plugin configuration."""
 
+    enabled: bool = True
     ollama_url: str = "http://localhost:11434"
     model: str = "llama3.2"
     max_response_length: int = 400
@@ -75,6 +77,7 @@ class LLMConfig:
 class WeatherConfig:
     """Weather plugin configuration."""
 
+    enabled: bool = True
     timeout: float = 10.0
 
 
@@ -82,6 +85,7 @@ class WeatherConfig:
 class WikipediaConfig:
     """Wikipedia plugin configuration."""
 
+    enabled: bool = True
     language: str = "en"
     max_summary_length: int = 400
     timeout: float = 10.0
@@ -116,6 +120,23 @@ class SecurityConfig:
 
 
 @dataclass
+class WebConfig:
+    """Web dashboard configuration.
+
+    Disabled by default. Note that enabling transcripts records the message
+    content of every node that talks to the gateway (in memory only).
+    """
+
+    enabled: bool = False
+    host: str = "127.0.0.1"
+    port: int = 8080
+    transcript_enabled: bool = False
+    transcript_max_messages: int = 50
+    transcript_max_nodes: int = 200
+    log_buffer_size: int = 1000
+
+
+@dataclass
 class Config:
     """Main configuration container."""
 
@@ -123,6 +144,7 @@ class Config:
     meshtastic: MeshtasticConfig = field(default_factory=MeshtasticConfig)
     plugins: PluginsConfig = field(default_factory=PluginsConfig)
     security: SecurityConfig = field(default_factory=SecurityConfig)
+    web: WebConfig = field(default_factory=WebConfig)
     plugin_paths: list[str] = field(default_factory=list)
 
     @classmethod
@@ -151,6 +173,7 @@ class Config:
             meshtastic=_dataclass_from_dict(MeshtasticConfig, data.get("meshtastic")),
             plugins=plugins,
             security=_dataclass_from_dict(SecurityConfig, data.get("security")),
+            web=_dataclass_from_dict(WebConfig, data.get("web")),
             plugin_paths=data.get("plugin_paths") or [],
         )
         config.validate()
@@ -199,6 +222,20 @@ class Config:
                 f"security.rate_limit_window_seconds must be positive, "
                 f"got {self.security.rate_limit_window_seconds}"
             )
+
+        if not 1 <= self.web.port <= 65535:
+            errors.append(f"web.port must be 1-65535, got {self.web.port}")
+        if self.web.transcript_max_messages <= 0:
+            errors.append(
+                f"web.transcript_max_messages must be positive, "
+                f"got {self.web.transcript_max_messages}"
+            )
+        if self.web.transcript_max_nodes <= 0:
+            errors.append(
+                f"web.transcript_max_nodes must be positive, got {self.web.transcript_max_nodes}"
+            )
+        if self.web.log_buffer_size <= 0:
+            errors.append(f"web.log_buffer_size must be positive, got {self.web.log_buffer_size}")
 
         if errors:
             raise ValueError("Invalid configuration:\n  - " + "\n  - ".join(errors))
