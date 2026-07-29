@@ -209,6 +209,76 @@ server:
 
 When `max_sessions` is reached, the oldest (least recently active) session is evicted.
 
+## Web Dashboard
+
+An optional web interface showing enabled plugins, active sessions, system logs, and
+per-session chat transcripts, with runtime control over plugins and sessions.
+
+```bash
+uv sync --extra web    # Install the dashboard dependencies
+```
+
+```yaml
+web:
+  enabled: true        # Off by default
+  host: 127.0.0.1      # Loopback only
+  port: 8080
+```
+
+Then open <http://127.0.0.1:8080>.
+
+The dashboard is **disabled by default**, and its dependencies (`fastapi`, `uvicorn`)
+are an optional extra — the core gateway keeps its three runtime dependencies. It
+runs on the gateway's own event loop and stops with it.
+
+### Plugin toggles
+
+Plugins can be turned off in config or from the dashboard at runtime:
+
+```yaml
+plugins:
+  weather:
+    enabled: false
+```
+
+A disabled plugin keeps its menu number reserved, so the remaining plugins are not
+renumbered. A node sitting inside a plugin that gets disabled is told
+"Plugin not available." and returned to the menu.
+
+### Chat transcripts
+
+> **Privacy:** enabling transcripts records the message content of every node that
+> talks to this gateway. Consider whether the operators of those nodes would expect
+> that.
+
+```yaml
+web:
+  transcript_enabled: false      # Off by default
+  transcript_max_messages: 50    # Retained per node
+  transcript_max_nodes: 200      # Nodes tracked before the oldest is dropped
+```
+
+Transcripts are held **in memory only** — never written to disk, and lost on
+restart. Both limits are hard caps, so a flood of spoofed node IDs cannot exhaust
+memory; with the defaults the ceiling is roughly 2 MB. Rate-limited messages are
+not recorded, and a node's transcript is dropped when its session ends.
+
+### Dashboard security
+
+The dashboard exposes session content and allows plugin and session changes, with
+**no authentication**. Binding to loopback is not sufficient on its own, so three
+guards are always applied:
+
+- **`Host` header validation** — defeats DNS rebinding, where an attacker-controlled
+  hostname resolving to `127.0.0.1` would otherwise let a remote page read responses.
+- **A custom header on all state-changing requests** — a cross-origin `<form>` POST
+  cannot set one, and adding it forces a CORS preflight the browser blocks. Without
+  this, any page you visited could disable your plugins.
+- **No CORS middleware** — cross-origin reads stay blocked by default.
+
+Changing `host` away from loopback puts transcripts on the network with no
+authentication in front of them; the server logs a warning if you do.
+
 ## Development
 
 ### Running Tests

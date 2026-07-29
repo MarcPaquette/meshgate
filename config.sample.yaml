@@ -14,21 +14,28 @@ meshtastic:
   tcp_host: null                 # TCP host for network connection
   tcp_port: 4403                 # TCP port for network connection
 
+# Each plugin can be turned off with `enabled: false`. A disabled plugin keeps
+# its menu number reserved (so the others are not renumbered) and can be
+# switched back on at runtime.
 plugins:
   gopher:
+    enabled: true                     # Show in the menu and accept messages
     root_directory: ./gopher_content  # Directory to serve files from
     allow_escape: false               # Allow navigation outside root (security risk)
 
   llm:
+    enabled: true
     ollama_url: http://localhost:11434  # Ollama API endpoint
     model: llama3.2                     # Default model to use
     max_response_length: 400            # Truncate responses to this length
     timeout: 30.0                       # Request timeout in seconds
 
   weather:
+    enabled: true
     timeout: 10.0                # Request timeout in seconds
 
   wikipedia:
+    enabled: true
     language: en                 # Wikipedia language code (en, de, fr, etc.)
     max_summary_length: 400      # Truncate summaries to this length
     timeout: 10.0                # Request timeout in seconds
@@ -47,6 +54,25 @@ security:
 
   # Plugin state limits
   max_plugin_state_bytes: 10240  # Max size of plugin state per session (bytes)
+
+# Web dashboard (DISABLED by default)
+# Shows enabled plugins, active sessions, system logs, and chat transcripts.
+web:
+  enabled: false                 # Serve the dashboard
+  host: 127.0.0.1                # Bind address - loopback only by default
+  port: 8080
+
+  # PRIVACY: enabling transcripts records the message content of every node
+  # that talks to this gateway. Held in memory only - never written to disk,
+  # and lost on restart.
+  transcript_enabled: false
+  transcript_max_messages: 50    # Messages retained per node
+  transcript_max_nodes: 200      # Nodes tracked before the oldest is dropped
+
+  # Recent log records retained in memory for the dashboard. Worst-case
+  # transcript memory is transcript_max_nodes x transcript_max_messages x
+  # message size (~200 bytes), so the defaults above cap it at roughly 2 MB.
+  log_buffer_size: 1000
 
 # External plugin loading (DISABLED by default for security)
 # WARNING: Plugins execute arbitrary Python with full system access.

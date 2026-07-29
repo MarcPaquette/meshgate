@@ -3,7 +3,6 @@
 import asyncio
 import logging
 import time
-from dataclasses import asdict
 
 from meshgate.config import Config
 from meshgate.core.content_chunker import ContentChunker
@@ -13,7 +12,9 @@ from meshgate.core.plugin_loader import PluginLoader
 from meshgate.core.plugin_registry import PluginRegistry
 from meshgate.core.rate_limiter import RateLimiter
 from meshgate.core.session_manager import SessionManager
+from meshgate.core.transcript import TranscriptRecorder
 from meshgate.interfaces.message_transport import IncomingMessage, MessageTransport
+from meshgate.interfaces.plugin import Plugin
 from meshgate.plugins.gopher_plugin import GopherPlugin
 from meshgate.plugins.llm_plugin import LLMPlugin
 from meshgate.plugins.weather_plugin import WeatherPlugin
@@ -87,6 +88,12 @@ class HandlerServer:
             max_state_bytes=self._config.security.max_plugin_state_bytes,
         )
         self._chunker = ContentChunker(max_size=self._config.server.max_message_size)
+        web = self._config.web
+        self._transcript = TranscriptRecorder(
+            enabled=web.transcript_enabled,
+            max_messages=web.transcript_max_messages,
+            max_nodes=web.transcript_max_nodes,
+        )
 
     def _setup_security(self) -> None:
         """Initialize security components (node filter, rate limiter)."""
@@ -126,17 +133,55 @@ class HandlerServer:
             )
 
     def _register_builtin_plugins(self) -> None:
-        """Register the built-in plugins based on configuration."""
+        """Register the built-in plugins based on configuration.
+
+        Constructor arguments are mapped explicitly rather than splatted from
+        asdict(): asdict() passes every field, so any config field that is not
+        also a constructor parameter (such as `enabled`) becomes an unexpected
+        keyword argument and breaks startup.
+        """
         plugins_cfg = self._config.plugins
 
-        # Gopher only uses root_directory (allow_escape is unused)
-        self._registry.register(GopherPlugin(root_directory=plugins_cfg.gopher.root_directory))
-        # LLM, Weather, Wikipedia configs map directly to plugin constructors
-        self._registry.register(LLMPlugin(**asdict(plugins_cfg.llm)))
-        self._registry.register(WeatherPlugin(**asdict(plugins_cfg.weather)))
-        self._registry.register(WikipediaPlugin(**asdict(plugins_cfg.wikipedia)))
+        builtins: list[tuple[bool, Plugin]] = [
+            # Gopher only uses root_directory (allow_escape is unused)
+            (
+                plugins_cfg.gopher.enabled,
+                GopherPlugin(root_directory=plugins_cfg.gopher.root_directory),
+            ),
+            (
+                plugins_cfg.llm.enabled,
+                LLMPlugin(
+                    ollama_url=plugins_cfg.llm.ollama_url,
+                    model=plugins_cfg.llm.model,
+                    max_response_length=plugins_cfg.llm.max_response_length,
+                    timeout=plugins_cfg.llm.timeout,
+                ),
+            ),
+            (
+                plugins_cfg.weather.enabled,
+                WeatherPlugin(timeout=plugins_cfg.weather.timeout),
+            ),
+            (
+                plugins_cfg.wikipedia.enabled,
+                WikipediaPlugin(
+                    language=plugins_cfg.wikipedia.language,
+                    max_summary_length=plugins_cfg.wikipedia.max_summary_length,
+                    timeout=plugins_cfg.wikipedia.timeout,
+                ),
+            ),
+        ]
 
-        logger.info(f"Registered {self._registry.plugin_count} built-in plugins")
+        for enabled, plugin in builtins:
+            self._registry.register(plugin)
+            if not enabled:
+                # Registered then disabled, so the plugin keeps its menu number
+                # reserved and can be toggled back on at runtime.
+                self._registry.disable(plugin.metadata.name)
+
+        logger.info(
+            f"Registered {self._registry.plugin_count} built-in plugins "
+            f"({self._registry.disabled_count} disabled)"
+        )
 
     def _load_external_plugins(self) -> None:
         """Load and register external plugins from configured paths.
@@ -295,6 +340,14 @@ class HandlerServer:
                     for node_id, notified_at in list(self._rate_limit_notified.items()):
                         if now - notified_at > window:
                             del self._rate_limit_notified[node_id]
+
+                    # Drop transcripts for nodes whose sessions are gone, so
+                    # the recorder does not accumulate node IDs indefinitely.
+                    if self._transcript.enabled:
+                        live = {s.node_id for s in self._session_manager.list_sessions()}
+                        dropped = self._transcript.retain_only(live)
+                        if dropped > 0:
+                            logger.debug(f"Dropped {dropped} stale transcripts")
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -321,6 +374,10 @@ class HandlerServer:
                     await self._send_response(node_id, f"Rate limited. Try in {retry_seconds}s")
                 return
 
+            # Recorded after the rate-limit check so a flood cannot fill the
+            # transcript with messages that were never acted on.
+            self._transcript.record_inbound(node_id, incoming.text)
+
             # Get or create session
             session = self._session_manager.get_session(node_id)
 
@@ -331,6 +388,8 @@ class HandlerServer:
                 # Route message
                 response = await self._router.route(incoming.text, session, incoming.context)
                 response_text = response.message
+
+            self._transcript.record_outbound(node_id, response_text)
 
             # Send response (chunked if necessary)
             await self._send_response(node_id, response_text)
@@ -392,6 +451,31 @@ class HandlerServer:
     def session_manager(self) -> SessionManager:
         """Get the session manager."""
         return self._session_manager
+
+    @property
+    def config(self) -> Config:
+        """Get the server configuration."""
+        return self._config
+
+    @property
+    def rate_limiter(self) -> RateLimiter:
+        """Get the rate limiter (read its properties; do not call check())."""
+        return self._rate_limiter
+
+    @property
+    def transport(self) -> MessageTransport:
+        """Get the message transport."""
+        return self._transport
+
+    @property
+    def transcript(self) -> TranscriptRecorder:
+        """Get the chat transcript recorder."""
+        return self._transcript
+
+    @property
+    def router(self) -> MessageRouter:
+        """Get the message router."""
+        return self._router
 
     @property
     def is_running(self) -> bool:

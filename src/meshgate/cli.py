@@ -5,10 +5,14 @@ import asyncio
 import logging
 import signal
 import sys
+from contextlib import suppress
 from pathlib import Path
 
 from meshgate.config import Config
+from meshgate.core.log_buffer import RingBufferHandler, set_active_buffer
 from meshgate.server import HandlerServer
+
+logger = logging.getLogger(__name__)
 
 
 def setup_logging(verbose: bool = False) -> None:
@@ -22,6 +26,28 @@ def setup_logging(verbose: bool = False) -> None:
     # force=True: basicConfig is a no-op if anything already configured the
     # root logger, which would silently make -v do nothing.
     logging.basicConfig(level=level, format=format_str, force=True)
+
+
+def attach_log_buffer(capacity: int) -> RingBufferHandler:
+    """Attach an in-memory log buffer to the root logger.
+
+    Added alongside the existing stderr handler rather than replacing it, so
+    console output is unchanged. Kept separate from setup_logging so it can be
+    attached after the config is read without re-running basicConfig, which
+    would tear down the handler already in place.
+
+    Args:
+        capacity: Number of recent records to retain
+
+    Returns:
+        The attached handler
+    """
+    root = logging.getLogger()
+    buffer = RingBufferHandler(capacity=capacity)
+    buffer.setLevel(root.level)
+    root.addHandler(buffer)
+    set_active_buffer(buffer)
+    return buffer
 
 
 def parse_args(args: list[str] | None = None) -> argparse.Namespace:
@@ -162,28 +188,72 @@ async def run_server(config: Config) -> None:
     """
     server = HandlerServer(config=config)
 
-    # Under systemd or Docker the process is stopped with SIGTERM, which would
-    # otherwise kill it without ever closing the serial interface.
     loop = asyncio.get_running_loop()
     server_task = asyncio.ensure_future(server.start())
+    tasks: list[asyncio.Future] = [server_task]
+
+    web_task: asyncio.Future | None = None
+    if config.web.enabled:
+        # Imported lazily so the optional `web` extra is only needed when the
+        # dashboard is actually turned on.
+        try:
+            from meshgate.web import serve as serve_dashboard
+        except ImportError as e:
+            logger.error(
+                f"Web dashboard enabled but its dependencies are missing ({e}). "
+                f"Install with: uv sync --extra web"
+            )
+            server_task.cancel()
+            raise SystemExit(1) from e
+
+        # Shares the gateway's event loop by construction: the API reads the
+        # same unlocked session and registry structures the message path
+        # mutates, so it must not run on another thread.
+        web_task = asyncio.ensure_future(serve_dashboard(server))
+        tasks.append(web_task)
+
+    def request_shutdown() -> None:
+        """Cancel every long-lived task on SIGTERM/SIGINT."""
+        for task in tasks:
+            task.cancel()
+
+    # Under systemd or Docker the process is stopped with SIGTERM, which would
+    # otherwise kill it without ever closing the serial interface.
     for signame in ("SIGTERM", "SIGINT"):
         sig = getattr(signal, signame, None)
         if sig is None:
             continue
         try:
-            loop.add_signal_handler(sig, server_task.cancel)
+            loop.add_signal_handler(sig, request_shutdown)
         except NotImplementedError:
             # Not supported on this platform (e.g. Windows)
             pass
 
     try:
-        await server_task
+        # If either task exits or fails, bring the other one down too rather
+        # than leaving a half-running process.
+        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
+
+        # Surface a real failure rather than exiting silently.
+        for task in done:
+            if not task.cancelled() and task.exception() is not None:
+                raise task.exception()
     except (KeyboardInterrupt, asyncio.CancelledError):
-        print("\nShutting down...")
+        # Through the logger, not print(), so it reaches the dashboard too.
+        logger.info("Shutting down...")
     except Exception as e:
-        logging.error(f"Server error: {e}")
+        logger.error(f"Server error: {e}")
         sys.exit(1)
     finally:
+        # The dashboard is stopped first, so no request can touch a
+        # half-torn-down server.
+        if web_task is not None and not web_task.done():
+            web_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await web_task
         await server.stop()
 
 
@@ -194,9 +264,14 @@ def main(args: list[str] | None = None) -> None:
         args: Command-line arguments (defaults to sys.argv)
     """
     parsed_args = parse_args(args)
+    # Logging is configured before the config is read so load errors are
+    # visible; the buffer is sized from config once it is available.
     setup_logging(verbose=parsed_args.verbose)
 
     config = load_config(parsed_args)
+
+    if config.web.enabled:
+        attach_log_buffer(config.web.log_buffer_size)
 
     try:
         asyncio.run(run_server(config))
