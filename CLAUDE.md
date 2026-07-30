@@ -16,6 +16,9 @@ uv run ruff format src/ tests/   # Format code
 uv run ruff format --check src/ tests/  # Verify formatting (CI gate)
 uv run pytest tests/ --cov=src/meshgate --cov-report=term-missing  # Coverage
 uv run python -m meshgate  # Run server
+./scripts/start.sh               # Run server with preflight checks
+./scripts/start.sh --check       # Preflight checks only, don't start
+shellcheck scripts/*.sh          # Lint shell scripts
 ```
 
 **Before pushing**, run the same three gates CI does (`.github/workflows/ci.yml`,
