@@ -47,6 +47,20 @@ log()  { printf '\033[0;36m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[0;33mwarning:\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[0;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
+# Show where the dashboard can be reached, set off from the surrounding log
+# output so it stays findable once the server starts logging.
+print_dashboard_banner() {
+    local url
+    printf '\n\033[0;32m  Dashboard\033[0m\n'
+    for url in "${DASHBOARD_URLS[@]+"${DASHBOARD_URLS[@]}"}"; do
+        printf '    \033[1;36m%s\033[0m\n' "${url}"
+    done
+    if [[ "${CFG_TRANSCRIPTS}" == "1" ]]; then
+        printf '    \033[0;33m(chat transcripts are being recorded)\033[0m\n'
+    fi
+    printf '\n'
+}
+
 # --- uv -----------------------------------------------------------------
 
 if ! command -v uv >/dev/null 2>&1; then
@@ -170,12 +184,46 @@ CFG_TRANSCRIPTS="0"
 
 eval "$(read_config_vars)"
 
+# Addresses the dashboard will actually be reachable on. A wildcard bind
+# ("0.0.0.0") is not a usable URL, so it is expanded into loopback plus this
+# host's LAN addresses.
+DASHBOARD_URLS=()
+
+collect_dashboard_urls() {
+    local port="${CFG_WEB_PORT}"
+
+    if [[ "${CFG_WEB_HOST}" != "0.0.0.0" && "${CFG_WEB_HOST}" != "::" && "${CFG_WEB_HOST}" != "*" ]]; then
+        DASHBOARD_URLS=("http://${CFG_WEB_HOST}:${port}")
+        return
+    fi
+
+    DASHBOARD_URLS=("http://127.0.0.1:${port}")
+
+    # Best-effort LAN addresses; absence of `ip` is not an error. Container and
+    # VM bridge interfaces are skipped by name - their addresses are not
+    # reachable from another machine, so listing them is just noise.
+    local addr
+    while read -r addr; do
+        [[ -n "${addr}" && "${addr}" != "127.0.0.1" ]] || continue
+        DASHBOARD_URLS+=("http://${addr}:${port}")
+    done < <(
+        if command -v ip >/dev/null 2>&1; then
+            ip -4 -oneline addr show scope global 2>/dev/null |
+                awk '$2 !~ /^(docker|br-|veth|virbr|lxc|podman|cni)/ {
+                    split($4, a, "/"); print a[1]
+                }'
+        elif command -v hostname >/dev/null 2>&1; then
+            hostname -I 2>/dev/null | tr ' ' '\n'
+        fi
+    )
+}
+
 if [[ "${CFG_WEB_ENABLED}" == "1" ]]; then
     if [[ "${NO_SYNC}" != "1" ]]; then
         log "Dashboard enabled, installing web extra"
         uv sync --quiet --inexact --extra web
     fi
-    log "Dashboard will listen on http://${CFG_WEB_HOST}:${CFG_WEB_PORT}"
+    collect_dashboard_urls
 
     if [[ "${CFG_WEB_HOST}" != "127.0.0.1" && "${CFG_WEB_HOST}" != "localhost" ]]; then
         warn "dashboard is bound to ${CFG_WEB_HOST}, not loopback. It exposes session
@@ -247,11 +295,20 @@ else
 fi
 
 if [[ "${CHECK_ONLY}" == "1" ]]; then
+    if [[ "${CFG_WEB_ENABLED}" == "1" ]]; then
+        print_dashboard_banner
+    fi
     log "Preflight checks passed (--check, not starting)"
     exit 0
 fi
 
 # --- start --------------------------------------------------------------
+
+# Printed last, immediately before handing over, so the address is not buried
+# under dependency and startup output. Most terminals turn these into links.
+if [[ "${CFG_WEB_ENABLED}" == "1" ]]; then
+    print_dashboard_banner
+fi
 
 log "Starting Meshgate (Ctrl-C to stop)"
 

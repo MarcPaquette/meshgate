@@ -37,7 +37,8 @@ uv sync --extra dev
 ## Quick Start
 
 The start script is the easiest way in. It installs dependencies, finds your
-config, checks the radio is reachable, and then hands over to the server:
+config, checks the radio is reachable, prints the dashboard address, and then
+hands over to the server:
 
 ```bash
 ./scripts/start.sh                 # auto-detect config and serial device
@@ -58,6 +59,18 @@ Script-specific options, which must come before the rest:
 | `--no-sync` | Skip dependency installation (faster restarts) |
 
 `MESHGATE_CONFIG` and `MESHGATE_NO_SYNC` work as environment equivalents.
+
+When the dashboard is enabled, its address is printed immediately before the
+server takes over, so it isn't buried under startup logs:
+
+```
+  Dashboard
+    http://127.0.0.1:8080
+```
+
+A wildcard bind (`host: 0.0.0.0`) is expanded into the addresses it is actually
+reachable on — loopback plus this host's LAN addresses — since `http://0.0.0.0`
+is not a usable URL. Container and VM bridge interfaces are left out.
 
 Or invoke the server directly:
 
