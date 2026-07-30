@@ -36,6 +36,31 @@ uv sync --extra dev
 
 ## Quick Start
 
+The start script is the easiest way in. It installs dependencies, finds your
+config, checks the radio is reachable, and then hands over to the server:
+
+```bash
+./scripts/start.sh                 # auto-detect config and serial device
+./scripts/start.sh -v              # debug logging
+./scripts/start.sh --check         # run preflight checks only, don't start
+```
+
+It catches the usual startup failures with an actionable message rather than a
+traceback — a missing config, a serial device that isn't plugged in, missing
+permissions on `/dev/ttyUSB0`, or `connection: tcp` with no host set. Any
+arguments are passed through to `meshgate`.
+
+Script-specific options, which must come before the rest:
+
+| Option | Effect |
+|---|---|
+| `--check` | Run preflight checks and exit without starting |
+| `--no-sync` | Skip dependency installation (faster restarts) |
+
+`MESHGATE_CONFIG` and `MESHGATE_NO_SYNC` work as environment equivalents.
+
+Or invoke the server directly:
+
 ```bash
 # Run with auto-detect serial device
 uv run python -m meshgate
@@ -48,6 +73,19 @@ uv run python -m meshgate --connection tcp --tcp-host 192.168.1.100
 
 # Run with config file
 uv run python -m meshgate --config config.yaml
+```
+
+### Running unattended
+
+The script `exec`s the server rather than wrapping it, so signals and exit codes
+pass straight through and a `SIGTERM` from systemd or Docker reaches the server's
+own shutdown handler — which is what closes the serial port cleanly. It resolves
+its own paths, so no `WorkingDirectory` is needed:
+
+```ini
+[Service]
+ExecStart=/path/to/meshgate/scripts/start.sh --no-sync
+Restart=on-failure
 ```
 
 ## User Interaction Flow
